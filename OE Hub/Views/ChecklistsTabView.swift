@@ -7,6 +7,8 @@ struct ChecklistsTabView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var isCompletedSectionExpanded: Bool = false
     @State private var showAddChecklistForm: Bool = false
+    @State private var selectedChecklistItem: ChecklistItem? = nil
+    @State private var showColorPicker = false
 
     var body: some View {
         VStack(spacing: 16) {
@@ -30,6 +32,13 @@ struct ChecklistsTabView: View {
         .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
         .onAppear {
             showAddChecklistForm = false
+        }
+        .sheet(isPresented: $showColorPicker) {
+            ColorPickerView(selectedItem: Binding(
+                get: { selectedChecklistItem },
+                set: { selectedChecklistItem = $0 as? ChecklistItem }
+            ), isPresented: $showColorPicker)
+                .presentationDetents([.medium])
         }
     }
 
@@ -81,9 +90,8 @@ struct ChecklistsTabView: View {
                     HStack {
                         Circle()
                             .fill(priorityColor(for: item.priority))
-                            .frame(width: 10, height: 10)
+                            .frame(width: 12, height: 12)
                         Text(item.title)
-                            .font(.headline)
                             .foregroundStyle(.primary)
                     }
                     .padding()
@@ -99,16 +107,14 @@ struct ChecklistsTabView: View {
                                 print("Save error: \(error)")
                             }
                         } label: {
-                            Label("Mark Completed", systemImage: "checkmark")
+                            Label("Mark Complete", systemImage: "checkmark")
                         }
                         .tint(.green)
-
-                        Menu {
-                            Button("Red: Urgent") { item.priority = "Red"; try? modelContext.save() }
-                            Button("Green: Standard") { item.priority = "Green"; try? modelContext.save() }
-                            Button("Yellow: Ideas") { item.priority = "Yellow"; try? modelContext.save() }
+                        Button {
+                            selectedChecklistItem = item
+                            showColorPicker = true
                         } label: {
-                            Label("Color", systemImage: "paintpalette")
+                            Label("Change Color", systemImage: "paintbrush")
                         }
                         .tint(.blue)
                     }
@@ -128,22 +134,20 @@ struct ChecklistsTabView: View {
                     }
                 }
             }
-
-            Section {
-                DisclosureGroup(isExpanded: $isCompletedSectionExpanded) {
+            if isCompletedSectionExpanded {
+                Section(header: Text("Completed Checklists (\(job.checklistItems.filter { $0.isCompleted }.count))")
+                    .font(.headline)) {
                     ForEach(job.checklistItems.filter { $0.isCompleted }) { item in
                         HStack {
                             Circle()
                                 .fill(priorityColor(for: item.priority))
-                                .frame(width: 10, height: 10)
+                                .frame(width: 12, height: 12)
                             Text(item.title)
-                                .font(.headline)
                                 .foregroundStyle(.secondary)
-                            if let completionDate = item.completionDate {
-                                Text("Completed: \(formattedDate(completionDate))")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
+                            Spacer()
+                            Text(formattedDate(item.completionDate ?? Date()))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                         .padding()
                         .background(.ultraThinMaterial)
@@ -177,8 +181,10 @@ struct ChecklistsTabView: View {
                             }
                         }
                     }
-                } label: {
-                    Text("Completed Checklists (\(job.checklistItems.filter { $0.isCompleted }.count))")
+                }
+            } else {
+                Button(action: { isCompletedSectionExpanded.toggle() }) {
+                    Text("Show Completed Checklists (\(job.checklistItems.filter { $0.isCompleted }.count))")
                         .font(.headline)
                 }
             }
@@ -202,10 +208,10 @@ struct ChecklistsTabView: View {
     }
 
     private func priorityColor(for priority: String) -> Color {
-        switch priority {
-        case "Red": return .red
-        case "Yellow": return .yellow
-        case "Green": return .green
+        switch priority.lowercased() {
+        case "red": return .red
+        case "yellow": return .yellow
+        case "green": return .green
         default: return .green
         }
     }

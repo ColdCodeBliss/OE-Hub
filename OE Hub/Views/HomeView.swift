@@ -1,5 +1,3 @@
-//Comment testing
-
 import SwiftUI
 import SwiftData
 
@@ -12,6 +10,8 @@ struct HomeView: View {
     @State private var newJobTitle = ""
     @State private var showJobHistory = false
     @State private var jobToDeletePermanently: Job? = nil
+    @State private var selectedJob: Job? = nil
+    @State private var showColorPicker = false
 
     var body: some View {
         NavigationStack {
@@ -19,15 +19,22 @@ struct HomeView: View {
                 List {
                     ForEach(jobs) { job in
                         NavigationLink(destination: JobDetailView(job: job)) {
-                            VStack(alignment: .leading) {
+                            VStack(alignment: .leading, spacing: 8) {
                                 Text(job.title)
                                     .font(.headline)
                                 Text("Created: \(job.creationDate, format: .dateTime)")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
+                                Text("\(activeItemsCount(job)) active items")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .background(Color.yellow.opacity(0.3)) // Diagnostic: Highlight the text area
                             }
                             .padding()
-                            .background(.ultraThinMaterial)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(color(for: job.colorCode))
+                            )
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                         .swipeActions(edge: .leading) {
@@ -39,6 +46,13 @@ struct HomeView: View {
                                 Label("Rename", systemImage: "pencil")
                             }
                             .tint(.blue)
+                            Button(action: {
+                                selectedJob = job
+                                showColorPicker = true
+                            }) {
+                                Label("Change Color", systemImage: "paintbrush")
+                            }
+                            .tint(.green)
                         }
                         .swipeActions(edge: .trailing) {
                             Button(role: .destructive) {
@@ -66,7 +80,7 @@ struct HomeView: View {
                         newJobTitle = ""
                     }
                     Button("Save") {
-                        if let job = jobToRename, !newJobTitle.isEmpty {
+                        if let job = jobToRename {
                             job.title = newJobTitle
                             try? modelContext.save()
                         }
@@ -75,21 +89,6 @@ struct HomeView: View {
                         newJobTitle = ""
                     }
                 }
-                .alert("Confirm Permanent Deletion", isPresented: Binding(
-                    get: { jobToDeletePermanently != nil },
-                    set: { if !$0 { jobToDeletePermanently = nil } }
-                )) {
-                    Button("Cancel", role: .cancel) { }
-                    Button("Delete Permanently", role: .destructive) {
-                        if let job = jobToDeletePermanently {
-                            modelContext.delete(job)
-                            try? modelContext.save()
-                        }
-                    }
-                } message: {
-                    Text("This action cannot be undone.")
-                }
-
                 if !deletedJobs.isEmpty {
                     Button(action: { showJobHistory = true }) {
                         HStack {
@@ -134,8 +133,33 @@ struct HomeView: View {
                             }
                         }
                     }
+                    .alert("Confirm Permanent Deletion", isPresented: Binding(
+                        get: { jobToDeletePermanently != nil },
+                        set: { if !$0 { jobToDeletePermanently = nil } }
+                    )) {
+                        Button("Cancel", role: .cancel) { }
+                        Button("Delete Permanently", role: .destructive) {
+                            if let job = jobToDeletePermanently {
+                                modelContext.delete(job)
+                                try? modelContext.save()
+                            }
+                        }
+                    } message: {
+                        Text("This action cannot be undone.")
+                    }
                 }
             }
+        }
+        .sheet(isPresented: $showColorPicker) {
+            ColorPickerView(selectedItem: Binding(
+                get: { selectedJob },
+                set: { if let job = $0 as? Job {
+                    selectedJob = job
+                    job.colorCode = job.colorCode // Force refresh by reassigning
+                    try? modelContext.save()
+                } }
+            ), isPresented: $showColorPicker)
+                .presentationDetents([.medium])
         }
     }
 
@@ -143,6 +167,12 @@ struct HomeView: View {
         let jobCount = jobs.count + 1
         let newJob = Job(title: "Job \(jobCount)")
         modelContext.insert(newJob)
+        // Force refresh to ensure new job is visible
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving new job: \(error)")
+        }
     }
 
     private func deleteJob(at offsets: IndexSet) {
@@ -152,6 +182,27 @@ struct HomeView: View {
             job.deletionDate = Date()
         }
         try? modelContext.save()
+    }
+
+    private func color(for colorCode: String?) -> Color {
+        switch colorCode?.lowercased() {
+        case "red": return .red
+        case "blue": return .blue
+        case "green": return .green
+        case "yellow": return .yellow
+        case "orange": return .orange
+        case "purple": return .purple
+        case "pink": return .pink
+        case "teal": return .teal
+        default: return .gray
+        }
+    }
+
+    private func activeItemsCount(_ job: Job) -> Int {
+        let activeDeliverables = job.deliverables.filter { !$0.isCompleted }.count
+        let activeChecklistItems = job.checklistItems.filter { !$0.isCompleted }.count
+        print("Job: \(job.title), Active Deliverables: \(activeDeliverables), Active Checklist Items: \(activeChecklistItems)") // Diagnostic print
+        return activeDeliverables + activeChecklistItems
     }
 }
 

@@ -1,3 +1,10 @@
+//
+//  ColorPickerView.swift
+//  OE Hub
+//
+//  Created by Ryan Bliss on 9/5/25.
+//
+
 import SwiftUI
 import SwiftData
 
@@ -16,7 +23,10 @@ struct ColorPickerView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 10) {
                     ForEach(colors, id: \.self) { colorName in
                         Button(action: {
-                            if let checklistItem = selectedItem as? ChecklistItem {
+                            if let job = selectedItem as? Job {
+                                job.colorCode = colorName
+                                try? modelContext.save()
+                            } else if let checklistItem = selectedItem as? ChecklistItem {
                                 checklistItem.priority = colorName.capitalized
                                 try? modelContext.save()
                             } else if let deliverable = selectedItem as? Deliverable {
@@ -31,7 +41,7 @@ struct ColorPickerView: View {
                                 .overlay(
                                     Circle()
                                         .stroke(Color.black, lineWidth: 1)
-                                        .opacity((selectedItem as? ChecklistItem)?.priority.lowercased() == colorName || (selectedItem as? Deliverable)?.colorCode == colorName ? 1 : 0)
+                                        .opacity((selectedItem as? Job)?.colorCode == colorName || (selectedItem as? ChecklistItem)?.priority.lowercased() == colorName || (selectedItem as? Deliverable)?.colorCode == colorName ? 1 : 0)
                                 )
                         }
                     }
@@ -60,7 +70,7 @@ struct ColorPickerView: View {
         case "pink": return .pink
         case "teal": return .teal
         case "gray": return .gray
-        default: return .gray
+        default: return .green
         }
     }
 }
