@@ -18,6 +18,7 @@ final class Job {
     var equipmentList: String?
     var jobType: String? = "Full-time"  // "Part-time", "Full-time", "Temporary", "Contracted"
     var contractEndDate: Date?
+    var colorCode: String? = "green"  // Changed default to green
 
     init(title: String) {
         self.title = title

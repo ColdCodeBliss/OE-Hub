@@ -67,11 +67,7 @@ struct DueTabView: View {
             Button("Delete Permanently", role: .destructive) {
                 if let deliverable = deliverableToDeletePermanently {
                     modelContext.delete(deliverable)
-                    do {
-                        try modelContext.save()
-                    } catch {
-                        print("Save error: \(error)")
-                    }
+                    try? modelContext.save()
                     removeAllNotifications(for: deliverable)
                 }
             }
@@ -79,7 +75,10 @@ struct DueTabView: View {
             Text("This action cannot be undone.")
         }
         .sheet(isPresented: $showColorPicker) {
-            ColorPickerView(selectedDeliverable: $selectedDeliverable, isPresented: $showColorPicker)
+            ColorPickerView(selectedItem: Binding(
+                get: { selectedDeliverable },
+                set: { selectedDeliverable = $0 as? Deliverable }
+            ), isPresented: $showColorPicker)
                 .presentationDetents([.medium])
         }
         .sheet(isPresented: $showReminderPicker) {
@@ -122,11 +121,7 @@ struct DueTabView: View {
                     job.deliverables.append(newDeliverable)
                     newTaskDescription = ""
                     newDueDate = Date()
-                    do {
-                        try modelContext.save()
-                    } catch {
-                        print("Save error: \(error)")
-                    }
+                    try? modelContext.save()
                     showAddDeliverableForm = false
                 }) {
                     Text("Add")
@@ -168,11 +163,7 @@ struct DueTabView: View {
                             get: { deliverable.dueDate },
                             set: { newValue in
                                 deliverable.dueDate = newValue
-                                do {
-                                    try modelContext.save()
-                                } catch {
-                                    print("Save error: \(error)")
-                                }
+                                try? modelContext.save()
                                 updateNotifications(for: deliverable)
                             }
                         ), displayedComponents: [.date, .hourAndMinute])
@@ -185,7 +176,7 @@ struct DueTabView: View {
                         showReminderPicker = true
                     }) {
                         Image(systemName: "bell")
-                            .foregroundColor(.black) // Changed from .gray to .black
+                            .foregroundColor(.black)
                             .padding(8)
                     }
                     .buttonStyle(PlainButtonStyle())
@@ -200,11 +191,7 @@ struct DueTabView: View {
                     Button {
                         deliverable.isCompleted = true
                         deliverable.completionDate = Date()
-                        do {
-                            try modelContext.save()
-                        } catch {
-                            print("Save error: \(error)")
-                        }
+                        try? modelContext.save()
                         removeAllNotifications(for: deliverable)
                     } label: {
                         Label("Mark Complete", systemImage: "checkmark")
@@ -222,11 +209,7 @@ struct DueTabView: View {
                     Button(role: .destructive) {
                         if let index = job.deliverables.firstIndex(of: deliverable) {
                             job.deliverables.remove(at: index)
-                            do {
-                                try modelContext.save()
-                            } catch {
-                                print("Save error: \(error)")
-                            }
+                            try? modelContext.save()
                             removeAllNotifications(for: deliverable)
                         }
                     } label: {
@@ -242,11 +225,7 @@ struct DueTabView: View {
                         removeAllNotifications(for: deliverable)
                     }
                 }
-                do {
-                    try modelContext.save()
-                } catch {
-                    print("Save error: \(error)")
-                }
+                try? modelContext.save()
             })
         }
     }
@@ -307,7 +286,7 @@ struct DueTabView: View {
         case "purple": return .purple
         case "pink": return .pink
         case "teal": return .teal
-        default: return .gray
+        default: return .green
         }
     }
 }
@@ -353,70 +332,6 @@ fileprivate func formattedDate(_ date: Date) -> String {
     let formatter = DateFormatter()
     formatter.dateFormat = "MM/dd/yyyy"
     return formatter.string(from: date)
-}
-
-struct ColorPickerView: View {
-    @Binding var selectedDeliverable: Deliverable?
-    @Binding var isPresented: Bool
-    let colors: [String] = ["red", "blue", "green", "yellow", "orange", "purple", "pink", "teal"]
-    @Environment(\.modelContext) private var modelContext
-
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Text("Select Color")
-                    .font(.title2)
-                    .bold()
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 10) {
-                    ForEach(colors, id: \.self) { colorName in
-                        Button(action: {
-                            if let deliverable = selectedDeliverable {
-                                deliverable.colorCode = colorName
-                                do {
-                                    try modelContext.save()
-                                } catch {
-                                    print("Save error: \(error)")
-                                }
-                                isPresented = false
-                            }
-                        }) {
-                            Circle()
-                                .fill(color(for: colorName))
-                                .frame(width: 40, height: 40)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.black, lineWidth: 1)
-                                        .opacity(selectedDeliverable?.colorCode == colorName ? 1 : 0)
-                                )
-                        }
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle("Color Picker")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        isPresented = false
-                    }
-                }
-            }
-        }
-    }
-
-    private func color(for colorCode: String) -> Color {
-        switch colorCode.lowercased() {
-        case "red": return .red
-        case "blue": return .blue
-        case "green": return .green
-        case "yellow": return .yellow
-        case "orange": return .orange
-        case "purple": return .purple
-        case "pink": return .pink
-        case "teal": return .teal
-        default: return .gray
-        }
-    }
 }
 
 struct ReminderPickerView: View {
