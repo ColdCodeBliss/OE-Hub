@@ -286,7 +286,7 @@ struct DueTabView: View {
         case "purple": return .purple
         case "pink": return .pink
         case "teal": return .teal
-        default: return .gray
+        default: return .green
         }
     }
 }

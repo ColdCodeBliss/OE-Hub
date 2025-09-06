@@ -22,7 +22,7 @@ struct HomeView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(job.title)
                                     .font(.headline)
-                                Text("Created: \(job.creationDate, format: .dateTime)")
+                                Text("Created: \(job.creationDate, format: .dateTime.month().day().year())")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                 Text("\(activeItemsCount(job)) active items")
@@ -31,12 +31,14 @@ struct HomeView: View {
                                     .background(Color.yellow.opacity(0.3)) // Diagnostic: Highlight the text area
                             }
                             .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading) // Extend bubble to full width, align text to left
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
                                     .fill(color(for: job.colorCode))
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
+                        .buttonStyle(PlainButtonStyle()) // Remove default button styling
                         .swipeActions(edge: .leading) {
                             Button(action: {
                                 jobToRename = job
@@ -107,7 +109,7 @@ struct HomeView: View {
                                     VStack(alignment: .trailing) {
                                         Text(job.title)
                                             .font(.headline)
-                                        Text("Deleted: \(job.deletionDate ?? Date(), format: .dateTime)")
+                                        Text("Deleted: \(job.deletionDate ?? Date(), format: .dateTime.month().day().year())")
                                             .font(.subheadline)
                                             .foregroundStyle(.secondary)
                                     }
@@ -167,7 +169,6 @@ struct HomeView: View {
         let jobCount = jobs.count + 1
         let newJob = Job(title: "Job \(jobCount)")
         modelContext.insert(newJob)
-        // Force refresh to ensure new job is visible
         do {
             try modelContext.save()
         } catch {
@@ -201,7 +202,7 @@ struct HomeView: View {
     private func activeItemsCount(_ job: Job) -> Int {
         let activeDeliverables = job.deliverables.filter { !$0.isCompleted }.count
         let activeChecklistItems = job.checklistItems.filter { !$0.isCompleted }.count
-        print("Job: \(job.title), Active Deliverables: \(activeDeliverables), Active Checklist Items: \(activeChecklistItems)") // Diagnostic print
+        print("Job: \(job.title), Active Deliverables: \(activeDeliverables), Active Checklist Items: \(activeChecklistItems)")
         return activeDeliverables + activeChecklistItems
     }
 }
