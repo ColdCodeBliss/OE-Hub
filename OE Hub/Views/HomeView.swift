@@ -22,7 +22,7 @@ struct HomeView: View {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(job.title)
                                     .font(.headline)
-                                Text("Created: \(job.creationDate, format: .dateTime.month().day().year())")
+                                Text("Created: \(job.creationDate, format: .dateTime.day().month().year())")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                                 Text("\(activeItemsCount(job)) active items")
@@ -70,7 +70,24 @@ struct HomeView: View {
                 }
                 .navigationTitle("WorkForge Stack")
                 .toolbar {
-                    Button("Add Job", systemImage: "plus") { addJob() }
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Menu {
+                            Button("Settings") {
+                                // Add Settings action here later
+                            }
+                            Button("Option 1") {
+                                // Placeholder for future development
+                            }
+                            Button("Option 2") {
+                                // Placeholder for future development
+                            }
+                        } label: {
+                            Label("Menu", systemImage: "line.horizontal.3")
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Add Job", systemImage: "plus") { addJob() }
+                    }
                 }
                 .scrollContentBackground(.hidden)
                 .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
@@ -109,7 +126,7 @@ struct HomeView: View {
                                     VStack(alignment: .trailing) {
                                         Text(job.title)
                                             .font(.headline)
-                                        Text("Deleted: \(job.deletionDate ?? Date(), format: .dateTime.month().day().year())")
+                                        Text("Deleted: \(job.deletionDate ?? Date(), format: .dateTime.day().month().year())")
                                             .font(.subheadline)
                                             .foregroundStyle(.secondary)
                                     }
