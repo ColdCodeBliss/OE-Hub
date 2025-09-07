@@ -12,7 +12,9 @@ struct HomeView: View {
     @State private var jobToDeletePermanently: Job? = nil
     @State private var selectedJob: Job? = nil
     @State private var showColorPicker = false
-
+    @State private var showSettings = false
+    @AppStorage("isDarkMode") private var isDarkMode = false
+    
     var body: some View {
         NavigationStack {
             VStack {
@@ -70,10 +72,10 @@ struct HomeView: View {
                 }
                 .navigationTitle("WorkForge Stack")
                 .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
+                    ToolbarItem(placement: .topBarLeading) {
                         Menu {
                             Button("Settings") {
-                                // Add Settings action here later
+                                showSettings = true
                             }
                             Button("Option 1") {
                                 // Placeholder for future development
@@ -85,7 +87,7 @@ struct HomeView: View {
                             Label("Menu", systemImage: "line.horizontal.3")
                         }
                     }
-                    ToolbarItem(placement: .navigationBarTrailing) {
+                    ToolbarItem(placement: .topBarTrailing) {
                         Button("Add Job", systemImage: "plus") { addJob() }
                     }
                 }
@@ -120,7 +122,7 @@ struct HomeView: View {
                     }
                     .padding()
                     .sheet(isPresented: $showJobHistory) {
-                        NavigationView {
+                        NavigationStack {
                             List {
                                 ForEach(deletedJobs) { job in
                                     VStack(alignment: .trailing) {
@@ -144,7 +146,7 @@ struct HomeView: View {
                             }
                             .navigationTitle("Job History")
                             .toolbar {
-                                ToolbarItem(placement: .navigationBarTrailing) {
+                                ToolbarItem(placement: .topBarTrailing) {
                                     Button("Done") {
                                         showJobHistory = false
                                     }
@@ -169,6 +171,9 @@ struct HomeView: View {
                 }
             }
         }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
         .sheet(isPresented: $showColorPicker) {
             ColorPickerView(selectedItem: Binding(
                 get: { selectedJob },
@@ -180,8 +185,9 @@ struct HomeView: View {
             ), isPresented: $showColorPicker)
                 .presentationDetents([.medium])
         }
+        .preferredColorScheme(isDarkMode ? .dark : .light)
     }
-
+    
     private func addJob() {
         let jobCount = jobs.count + 1
         let newJob = Job(title: "Job \(jobCount)")
@@ -192,7 +198,7 @@ struct HomeView: View {
             print("Error saving new job: \(error)")
         }
     }
-
+    
     private func deleteJob(at offsets: IndexSet) {
         for offset in offsets {
             let job = jobs[offset]
@@ -201,7 +207,7 @@ struct HomeView: View {
         }
         try? modelContext.save()
     }
-
+    
     private func color(for colorCode: String?) -> Color {
         switch colorCode?.lowercased() {
         case "red": return .red
@@ -215,7 +221,7 @@ struct HomeView: View {
         default: return .gray
         }
     }
-
+    
     private func activeItemsCount(_ job: Job) -> Int {
         let activeDeliverables = job.deliverables.filter { !$0.isCompleted }.count
         let activeChecklistItems = job.checklistItems.filter { !$0.isCompleted }.count
