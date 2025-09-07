@@ -9,8 +9,9 @@ struct NotesTabView: View {
     @State private var newNoteSummary = ""
     @State private var selectedNote: Note? = nil
     var job: Job
-
+    
     private let colors: [Color] = [.red, .blue, .green, .orange, .yellow, .purple, .pink, .teal]
+    
     private var nextColorIndex: Int {
         let usedIndices = job.notes.map { $0.colorIndex }
         for index in 0..<colors.count {
@@ -20,7 +21,7 @@ struct NotesTabView: View {
         }
         return (job.notes.count) % colors.count
     }
-
+    
     var body: some View {
         VStack(spacing: 16) {
             Button(action: { isAddingNote = true }) {
@@ -33,7 +34,7 @@ struct NotesTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal)
-
+            
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                     ForEach(job.notes) { note in
@@ -57,19 +58,21 @@ struct NotesTabView: View {
         }
         .navigationTitle("Notes")
     }
-
+    
     @ViewBuilder
     private var noteEditor: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 16) {
                 TextField("Summary (short description)", text: $newNoteSummary)
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
+                
                 TextEditor(text: $newNoteContent)
                     .frame(height: 200)
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal)
+                
                 Picker("Color", selection: Binding(
                     get: { selectedNote?.colorIndex ?? nextColorIndex },
                     set: { if let note = selectedNote { note.colorIndex = $0; try? modelContext.save() } }
@@ -80,6 +83,7 @@ struct NotesTabView: View {
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal)
+                
                 HStack {
                     Button("Cancel") {
                         isAddingNote = false
@@ -89,6 +93,7 @@ struct NotesTabView: View {
                         selectedNote = nil
                     }
                     .foregroundStyle(.red)
+                    
                     Button("Save") {
                         if !newNoteContent.isEmpty && !newNoteSummary.isEmpty {
                             if let note = selectedNote {
@@ -120,16 +125,20 @@ struct NotesTabView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
             .navigationTitle(selectedNote != nil ? "Edit Note" : "New Note")
-            .navigationBarItems(trailing: Button("Done") {
-                isAddingNote = false
-                isEditingNote = false
-                newNoteContent = ""
-                newNoteSummary = ""
-                selectedNote = nil
-            })
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        isAddingNote = false
+                        isEditingNote = false
+                        newNoteContent = ""
+                        newNoteSummary = ""
+                        selectedNote = nil
+                    }
+                }
+            }
         }
     }
-
+    
     private func noteTile(for note: Note) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(note.summary)
@@ -149,7 +158,7 @@ struct NotesTabView: View {
         )
         .shadow(radius: 5)
     }
-
+    
     private func colorName(for index: Int) -> String {
         switch index {
         case 0: return "Red"

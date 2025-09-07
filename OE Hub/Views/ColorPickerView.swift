@@ -1,10 +1,9 @@
 //
-//  ColorPickerView.swift
-//  OE Hub
+// ColorPickerView.swift
+// OE Hub
 //
-//  Created by Ryan Bliss on 9/5/25.
+// Created by Ryan Bliss on 9/5/25.
 //
-
 import SwiftUI
 import SwiftData
 
@@ -13,9 +12,9 @@ struct ColorPickerView: View {
     @Binding var isPresented: Bool
     let colors: [String] = ["red", "blue", "green", "yellow", "orange", "purple", "pink", "teal", "gray"]
     @Environment(\.modelContext) private var modelContext
-
+    
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 20) {
                 Text("Select Color")
                     .font(.title2)
@@ -50,7 +49,7 @@ struct ColorPickerView: View {
             }
             .navigationTitle("Color Picker")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") {
                         isPresented = false
                     }
@@ -58,7 +57,7 @@ struct ColorPickerView: View {
             }
         }
     }
-
+    
     private func color(for colorCode: String) -> Color {
         switch colorCode.lowercased() {
         case "red": return .red
