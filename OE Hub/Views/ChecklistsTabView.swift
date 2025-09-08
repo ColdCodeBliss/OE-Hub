@@ -241,7 +241,7 @@ struct ChecklistsTabView: View {
         try? modelContext.save()
     }
 }
-
+/*
 #Preview {
     ChecklistsTabView(
         newChecklistItem: .constant(""),
@@ -249,3 +249,5 @@ struct ChecklistsTabView: View {
     )
     .modelContainer(for: [Job.self, ChecklistItem.self], inMemory: true)
 }
+*/
+

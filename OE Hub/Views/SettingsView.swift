@@ -48,7 +48,8 @@ struct DonateSheet: View {
         .presentationDetents([.medium])
     }
 }
-
+/*
 #Preview {
     SettingsView()
 }
+*/

@@ -196,7 +196,7 @@ struct NotesTabView: View {
         return ((idx % colors.count) + colors.count) % colors.count
     }
 }
-
+/*
 #Preview {
     do {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -207,3 +207,4 @@ struct NotesTabView: View {
         fatalError("Failed to create preview container: \(error)")
     }
 }
+*/

@@ -75,6 +75,7 @@ struct HomeView: View {
                 .navigationTitle(".nexusStack")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
+                    
                     ToolbarItem(placement: .topBarLeading) {
                         Menu {
                             Button("Settings") { showSettings = true }
@@ -216,8 +217,9 @@ struct HomeView: View {
         return activeDeliverables + activeChecklistItems
     }
 }
-
+/*
 #Preview {
     HomeView()
         .modelContainer(for: Job.self, inMemory: true)
 }
+*/

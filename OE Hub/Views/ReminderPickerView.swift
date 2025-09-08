@@ -157,7 +157,7 @@ struct ReminderPickerView: View {
         return (order[a] ?? 0) < (order[b] ?? 0)
     }
 }
-
+/*
 #Preview {
     do {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -171,3 +171,4 @@ struct ReminderPickerView: View {
         fatalError("Preview container error: \(error)")
     }
 }
+*/
