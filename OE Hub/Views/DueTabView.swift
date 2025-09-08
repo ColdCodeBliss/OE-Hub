@@ -14,7 +14,7 @@ struct DueTabView: View {
     @State private var selectedDeliverable: Deliverable? = nil
     @State private var showColorPicker = false
     @State private var showReminderPicker = false
-
+    
     var body: some View {
         VStack(spacing: 16) {
             Button(action: { showAddDeliverableForm = true }) {
@@ -27,13 +27,13 @@ struct DueTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal)
-
+            
             if showAddDeliverableForm {
                 deliverableForm
             }
-
+            
             deliverablesList
-
+            
             if !completedDeliverables.isEmpty {
                 Button(action: { showCompletedDeliverables = true }) {
                     HStack {
@@ -86,11 +86,11 @@ struct DueTabView: View {
                 .presentationDetents([.medium])
         }
     }
-
+    
     var completedDeliverables: [Deliverable] {
         job.deliverables.filter { $0.isCompleted }
     }
-
+    
     @ViewBuilder
     private var deliverableForm: some View {
         VStack {
@@ -115,7 +115,6 @@ struct DueTabView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.trailing)
-
                 Button(action: {
                     let newDeliverable = Deliverable(taskDescription: newTaskDescription, dueDate: newDueDate)
                     job.deliverables.append(newDeliverable)
@@ -140,7 +139,7 @@ struct DueTabView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
     }
-
+    
     @ViewBuilder
     private var deliverablesList: some View {
         List {
@@ -149,7 +148,7 @@ struct DueTabView: View {
         .scrollContentBackground(.hidden)
         .animation(.spring(duration: 0.3), value: job.deliverables)
     }
-
+    
     @ViewBuilder
     private var activeDeliverablesSection: some View {
         Section(header: Text("Active Deliverables")) {
@@ -229,10 +228,10 @@ struct DueTabView: View {
             })
         }
     }
-
+    
     @ViewBuilder
     private var completedDeliverablesView: some View {
-        NavigationView {
+        NavigationStack {
             List {
                 ForEach(completedDeliverables, id: \.self) { deliverable in
                     VStack(alignment: .leading) {
@@ -269,26 +268,14 @@ struct DueTabView: View {
             }
         }
     }
-
+    
     private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MM/dd/yyyy"
         return formatter.string(from: date)
     }
-
-    private func color(for colorCode: String?) -> Color {
-        switch colorCode?.lowercased() {
-        case "red": return .red
-        case "blue": return .blue
-        case "green": return .green
-        case "yellow": return .yellow
-        case "orange": return .orange
-        case "purple": return .purple
-        case "pink": return .pink
-        case "teal": return .teal
-        default: return .green
-        }
-    }
+    
+   
 }
 
 // Notification utility functions
@@ -299,7 +286,6 @@ fileprivate func updateNotifications(for deliverable: Deliverable) {
     content.title = "Deliverable Reminder"
     content.body = "\(deliverable.taskDescription) is due on \(formattedDate(deliverable.dueDate))"
     content.sound = UNNotificationSound.default
-
     for offset in deliverable.reminderOffsets {
         if let triggerDate = calculateTriggerDate(for: offset, dueDate: deliverable.dueDate), triggerDate > Date() {
             let trigger = UNCalendarNotificationTrigger(dateMatching: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: triggerDate), repeats: false)
@@ -339,9 +325,9 @@ struct ReminderPickerView: View {
     @Binding var isPresented: Bool
     let reminderOptions: [String] = ["2 weeks", "1 week", "2 days", "day of"]
     @Environment(\.modelContext) private var modelContext
-
+    
     var body: some View {
-        NavigationView {
+        NavigationStack {
             VStack(spacing: 20) {
                 Text("Set Reminders")
                     .font(.title2)

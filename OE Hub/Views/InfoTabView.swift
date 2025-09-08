@@ -1,11 +1,9 @@
 //
-//  InfoTabView.swift
-//  WorkForge
+// InfoTabView.swift
+// WorkForge
 //
-//  Created by Ryan Bliss on 9/4/25.
+// Created by Ryan Bliss on 9/4/25.
 //
-
-
 import SwiftUI
 import SwiftData
 
@@ -21,14 +19,14 @@ struct InfoTabView: View {
     @State private var jobType: String = "Full-time"
     @State private var contractEndDate: Date? = nil
     @State private var showEditForm = false
-
+    
     var body: some View {
         VStack(spacing: 16) {
             Text("Job Information")
                 .font(.title2)
                 .bold()
                 .padding(.top)
-
+            
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     if !email.isEmpty {
@@ -50,7 +48,6 @@ struct InfoTabView: View {
                     if jobType == "Contracted", let endDate = contractEndDate {
                         Text("Contract Ends: \(endDate, format: .dateTime.month(.twoDigits).day(.twoDigits).year(.defaultDigits))")
                     }
-
                     Button("Edit") {
                         showEditForm = true
                     }
@@ -66,7 +63,7 @@ struct InfoTabView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
             .sheet(isPresented: $showEditForm) {
-                NavigationView {
+                NavigationStack {
                     Form {
                         Section(header: Text("Job Information")) {
                             TextField("Email", text: $email)
@@ -121,7 +118,7 @@ struct InfoTabView: View {
             }
         }
     }
-
+    
     private func loadJobInfo() {
         email = job.email ?? ""
         payRate = job.payRate
@@ -132,7 +129,7 @@ struct InfoTabView: View {
         jobType = job.jobType ?? "Full-time"
         contractEndDate = job.contractEndDate
     }
-
+    
     private func saveJobInfo() {
         job.email = email
         job.payRate = payRate

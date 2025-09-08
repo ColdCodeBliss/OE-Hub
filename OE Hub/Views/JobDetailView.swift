@@ -8,33 +8,35 @@ struct JobDetailView: View {
     @State private var newChecklistItem: String = ""
     @State private var isCompletedSectionExpanded: Bool = false
     var job: Job
-
+    
     var body: some View {
-        TabView {
-            DueTabView(
-                newTaskDescription: $newTaskDescription,
-                newDueDate: $newDueDate,
-                isCompletedSectionExpanded: $isCompletedSectionExpanded,
-                job: job
-            )
-            .tabItem { Label("Due", systemImage: "calendar") }
-
-            ChecklistsTabView(
-                newChecklistItem: $newChecklistItem,
-                job: job
-            )
-            .tabItem { Label("Checklist", systemImage: "checkmark.square") }
-
-            NotesTabView(job: job)
-                .tabItem { Label("Notes", systemImage: "note.text") }
-
-            InfoTabView(job: job)
-                .tabItem { Label("Info", systemImage: "info.circle") }
+        NavigationStack {
+            TabView {
+                DueTabView(
+                    newTaskDescription: $newTaskDescription,
+                    newDueDate: $newDueDate,
+                    isCompletedSectionExpanded: $isCompletedSectionExpanded,
+                    job: job
+                )
+                .tabItem { Label("Due", systemImage: "calendar") }
+                
+                ChecklistsTabView(
+                    newChecklistItem: $newChecklistItem,
+                    job: job
+                )
+                .tabItem { Label("Checklist", systemImage: "checkmark.square") }
+                
+                NotesTabView(job: job)
+                    .tabItem { Label("Notes", systemImage: "note.text") }
+                
+                InfoTabView(job: job)
+                    .tabItem { Label("Info", systemImage: "info.circle") }
+            }
+            .navigationTitle(job.title)
+            .navigationBarTitleDisplayMode(.inline)
         }
-        .navigationTitle(job.title)
-        .navigationBarTitleDisplayMode(.inline)
     }
-
+    
     private func addDeliverable() {
         withAnimation {
             let newDeliverable = Deliverable(taskDescription: newTaskDescription, dueDate: newDueDate)
@@ -44,7 +46,7 @@ struct JobDetailView: View {
             try? modelContext.save()
         }
     }
-
+    
     private func deleteDeliverable(at offsets: IndexSet) {
         withAnimation {
             for offset in offsets.reversed() {
@@ -56,7 +58,7 @@ struct JobDetailView: View {
             try? modelContext.save()
         }
     }
-
+    
     private func deleteCompletedDeliverable(at offsets: IndexSet) {
         withAnimation {
             for offset in offsets.reversed() {
@@ -68,7 +70,7 @@ struct JobDetailView: View {
             try? modelContext.save()
         }
     }
-
+    
     private func addChecklistItem() {
         withAnimation {
             let newItem = ChecklistItem(title: newChecklistItem)
@@ -77,7 +79,7 @@ struct JobDetailView: View {
             try? modelContext.save()
         }
     }
-
+    
     private func deleteChecklistItem(at offsets: IndexSet) {
         withAnimation {
             job.checklistItems.remove(atOffsets: offsets)

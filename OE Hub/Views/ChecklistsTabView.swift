@@ -9,7 +9,8 @@ struct ChecklistsTabView: View {
     @State private var showAddChecklistForm: Bool = false
     @State private var selectedChecklistItem: ChecklistItem? = nil
     @State private var showColorPicker = false
-
+    @State private var showClearConfirmation = false
+    
     var body: some View {
         VStack(spacing: 16) {
             Button(action: { showAddChecklistForm = true }) {
@@ -22,11 +23,11 @@ struct ChecklistsTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal)
-
+            
             if showAddChecklistForm {
                 checklistForm
             }
-
+            
             checklistsList
         }
         .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
@@ -40,8 +41,16 @@ struct ChecklistsTabView: View {
             ), isPresented: $showColorPicker)
                 .presentationDetents([.medium])
         }
+        .alert("Clear Completed Checklists", isPresented: $showClearConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                clearCompletedChecklists()
+            }
+        } message: {
+            Text("Are you sure you want to permanently delete all completed checklists? This action cannot be undone.")
+        }
     }
-
+    
     @ViewBuilder
     private var checklistForm: some View {
         VStack {
@@ -63,7 +72,6 @@ struct ChecklistsTabView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding(.trailing)
-
                 Button(action: addChecklistItem) {
                     Text("Add")
                         .frame(maxWidth: .infinity)
@@ -81,7 +89,7 @@ struct ChecklistsTabView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
     }
-
+    
     @ViewBuilder
     private var checklistsList: some View {
         List {
@@ -134,9 +142,23 @@ struct ChecklistsTabView: View {
                     }
                 }
             }
-            if isCompletedSectionExpanded {
-                Section(header: Text("Completed Checklists (\(job.checklistItems.filter { $0.isCompleted }.count))")
-                    .font(.headline)) {
+            
+            Section(header:
+                HStack {
+                    Text("Completed Checklists (\(job.checklistItems.filter { $0.isCompleted }.count))")
+                        .font(.headline)
+                    Spacer()
+                    Image(systemName: isCompletedSectionExpanded ? "chevron.down" : "chevron.right")
+                        .foregroundStyle(.gray)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation {
+                        isCompletedSectionExpanded.toggle()
+                    }
+                }
+            ) {
+                if isCompletedSectionExpanded {
                     ForEach(job.checklistItems.filter { $0.isCompleted }) { item in
                         HStack {
                             Circle()
@@ -181,18 +203,21 @@ struct ChecklistsTabView: View {
                             }
                         }
                     }
-                }
-            } else {
-                Button(action: { isCompletedSectionExpanded.toggle() }) {
-                    Text("Show Completed Checklists (\(job.checklistItems.filter { $0.isCompleted }.count))")
-                        .font(.headline)
+                    
+                    if !job.checklistItems.filter({ $0.isCompleted }).isEmpty {
+                        Button(role: .destructive) {
+                            showClearConfirmation = true
+                        } label: {
+                            Label("Clear Completed", systemImage: "trash")
+                        }
+                    }
                 }
             }
         }
         .listStyle(.plain)
         .listRowSeparator(.hidden)
     }
-
+    
     private func addChecklistItem() {
         withAnimation {
             let newItem = ChecklistItem(title: newChecklistItem)
@@ -206,7 +231,15 @@ struct ChecklistsTabView: View {
             showAddChecklistForm = false
         }
     }
-
+    
+    private func clearCompletedChecklists() {
+        let completed = job.checklistItems.filter { $0.isCompleted }
+        for item in completed {
+            modelContext.delete(item)
+        }
+        try? modelContext.save()
+    }
+    
     private func priorityColor(for priority: String) -> Color {
         switch priority.lowercased() {
         case "red": return .red
@@ -215,7 +248,7 @@ struct ChecklistsTabView: View {
         default: return .green
         }
     }
-
+    
     private func formattedDate(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "MM/dd/yyyy"
