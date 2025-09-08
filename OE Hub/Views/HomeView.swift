@@ -70,7 +70,7 @@ struct HomeView: View {
                     }
                     .onDelete(perform: deleteJob)
                 }
-                .navigationTitle("WorkForge Stack")
+                .navigationTitle(Text(".nexusStack").font(.system(.largeTitle, design: .rounded, weight: .semibold)))
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Menu {
@@ -208,24 +208,11 @@ struct HomeView: View {
         try? modelContext.save()
     }
     
-    private func color(for colorCode: String?) -> Color {
-        switch colorCode?.lowercased() {
-        case "red": return .red
-        case "blue": return .blue
-        case "green": return .green
-        case "yellow": return .yellow
-        case "orange": return .orange
-        case "purple": return .purple
-        case "pink": return .pink
-        case "teal": return .teal
-        default: return .gray
-        }
-    }
+    
     
     private func activeItemsCount(_ job: Job) -> Int {
         let activeDeliverables = job.deliverables.filter { !$0.isCompleted }.count
         let activeChecklistItems = job.checklistItems.filter { !$0.isCompleted }.count
-        print("Job: \(job.title), Active Deliverables: \(activeDeliverables), Active Checklist Items: \(activeChecklistItems)")
         return activeDeliverables + activeChecklistItems
     }
 }
