@@ -28,11 +28,9 @@ struct HomeView: View {
                                     .font(.headline)
                                 Text("Created: \(job.creationDate, format: .dateTime.day().month().year())")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(.secondary) //remove for darker text
                                 Text("\(activeItemsCount(job)) active items")
                                     .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .background(Color.yellow.opacity(0.3)) // Diagnostic: Highlight the text area
                             }
                             .padding()
                             .frame(maxWidth: .infinity, alignment: .leading) // Extend bubble to full width, align text to left
