@@ -1,3 +1,11 @@
+//
+//  JobRowView.swift
+//  OE Hub
+//
+//  Created by Ryan Bliss on 9/8/25.
+//
+
+
 import SwiftUI
 import SwiftData
 

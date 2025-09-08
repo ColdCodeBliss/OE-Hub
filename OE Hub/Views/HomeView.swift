@@ -2,202 +2,226 @@ import SwiftUI
 import SwiftData
 
 struct HomeView: View {
-    @Query(filter: #Predicate<Job> { !$0.isDeleted }) private var jobs: [Job]
-    @Query(filter: #Predicate<Job> { $0.isDeleted }) private var deletedJobs: [Job]
+    // Queries (initialized in init to ease the type checker)
+    @Query private var jobs: [Job]
+    @Query private var deletedJobs: [Job]
+
     @Environment(\.modelContext) private var modelContext
 
+    // UI State
     @State private var isRenaming = false
     @State private var jobToRename: Job?
     @State private var newJobTitle = ""
+
     @State private var showJobHistory = false
-    @State private var jobToDeletePermanently: Job? = nil
-    @State private var selectedJob: Job? = nil
+    @State private var jobToDeletePermanently: Job?
+
+    @State private var selectedJob: Job?
     @State private var showColorPicker = false
     @State private var showSettings = false
 
     @AppStorage("isDarkMode") private var isDarkMode = false
 
+    // MARK: - Init: move #Predicate here (reduces compiler load)
+    init() {
+        _jobs = Query(
+            filter: #Predicate<Job> { !$0.isDeleted },
+            sort: [SortDescriptor(\.creationDate, order: .forward)]
+        )
+        _deletedJobs = Query(
+            filter: #Predicate<Job> { $0.isDeleted },
+            sort: [SortDescriptor(\.deletionDate, order: .reverse)]
+        )
+    }
+
     var body: some View {
         NavigationStack {
             VStack {
-                List {
-                    ForEach(jobs) { job in
-                        NavigationLink(destination: JobDetailView(job: job)) {
-                            // Card-style row
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text(job.title)
-                                    .font(.headline)
-                                Text("Created: \(job.creationDate, format: .dateTime.day().month().year())")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                Text("\(activeItemsCount(job)) active items")
-                                    .font(.caption)
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(color(for: job.colorCode))
-                            )
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                        .buttonStyle(.plain)
-                        .swipeActions(edge: .leading) {
-                            Button {
-                                jobToRename = job
-                                newJobTitle = job.title
-                                isRenaming = true
-                            } label: {
-                                Label("Rename", systemImage: "pencil")
-                            }
-                            .tint(.blue)
+                jobList           // extracted for clarity
+                jobHistoryButton  // lightweight conditional
+            }
+            .navigationTitle(".nexusStack")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar { toolbarContent }
+            .safeAreaInset(edge: .top, spacing: 0) { NavLogoInset() }  // right-aligned logo under the +
+            .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
 
-                            Button {
-                                selectedJob = job
-                                showColorPicker = true
-                            } label: {
-                                Label("Change Color", systemImage: "paintbrush")
-                            }
-                            .tint(.green)
-                        }
-                        .swipeActions(edge: .trailing) {
-                            Button(role: .destructive) {
-                                job.isDeleted = true
-                                job.deletionDate = Date()
-                                try? modelContext.save()
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                    }
-                    .onDelete(perform: deleteJob)
-                }
-                .navigationTitle(".nexusStack")
-                .navigationBarTitleDisplayMode(.large)
-                .toolbar {
-                    
-                    ToolbarItem(placement: .topBarLeading) {
-                        Menu {
-                            Button("Settings") { showSettings = true }
-                            Button("Option 1") { /* future */ }
-                            Button("Option 2") { /* future */ }
-                        } label: {
-                            Label("Menu", systemImage: "line.horizontal.3")
-                        }
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Add Job", systemImage: "plus") { addJob() }
-                    }
-                }
-                .scrollContentBackground(.hidden)
-                .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
-                .alert("Rename Job", isPresented: $isRenaming) {
-                    TextField("New Title", text: $newJobTitle)
-                    Button("Cancel", role: .cancel) {
-                        isRenaming = false
-                        jobToRename = nil
-                        newJobTitle = ""
-                    }
-                    Button("Save") {
-                        if let job = jobToRename {
-                            job.title = newJobTitle
-                            try? modelContext.save()
-                        }
-                        isRenaming = false
-                        jobToRename = nil
-                        newJobTitle = ""
-                    }
-                }
+            // Sheets
+            .sheet(isPresented: $showJobHistory) {
+                JobHistorySheetView(
+                    deletedJobs: deletedJobs,
+                    jobToDeletePermanently: $jobToDeletePermanently,
+                    onDone: { showJobHistory = false }
+                )
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .sheet(isPresented: $showColorPicker) {
+                ColorPickerView(
+                    selectedItem: selectedItemBinding, // extracted binding (no heavy inline closures)
+                    isPresented: $showColorPicker
+                )
+                .presentationDetents([.medium])
+            }
 
-                if !deletedJobs.isEmpty {
-                    Button(action: { showJobHistory = true }) {
-                        HStack {
-                            Text("Job History")
-                                .font(.subheadline)
-                            Image(systemName: "chevron.right")
-                                .font(.subheadline)
-                        }
-                        .foregroundStyle(.blue)
+            // Alerts
+            .alert("Rename Job", isPresented: $isRenaming) {  // simpler overload
+                renameAlertButtons
+            }
+            .alert("Confirm Permanent Deletion", isPresented: deletionAlertFlag) {
+                deletionAlertButtons
+            } message: {
+                Text("This action cannot be undone.")
+            }
+        }
+        .preferredColorScheme(isDarkMode ? .dark : .light)
+    }
+
+    // MARK: - Subviews
+
+    private var jobList: some View {
+        List {
+            ForEach(jobs, id: \.persistentModelID) { (job: Job) in
+                NavigationLink(destination: JobDetailView(job: job)) {
+                    JobRowView(job: job) // separate file
+                }
+                .buttonStyle(.plain)
+                .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    Button { startRenaming(job) } label: {
+                        Label("Rename", systemImage: "pencil")
                     }
-                    .padding()
-                    .sheet(isPresented: $showJobHistory) {
-                        NavigationStack {
-                            List {
-                                ForEach(deletedJobs) { job in
-                                    VStack(alignment: .trailing) {
-                                        Text(job.title)
-                                            .font(.headline)
-                                        Text("Deleted: \(job.deletionDate ?? Date(), format: .dateTime.day().month().year())")
-                                            .font(.subheadline)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .padding()
-                                    .background(.ultraThinMaterial)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .swipeActions(edge: .trailing) {
-                                        Button(role: .destructive) {
-                                            jobToDeletePermanently = job
-                                        } label: {
-                                            Label("Total Deletion", systemImage: "trash.fill")
-                                        }
-                                    }
-                                }
-                            }
-                            .navigationTitle("Job History")
-                            .toolbar {
-                                ToolbarItem(placement: .topBarTrailing) {
-                                    Button("Done") { showJobHistory = false }
-                                }
-                            }
-                        }
+                    .tint(.blue)
+
+                    Button {
+                        selectedJob = job
+                        showColorPicker = true
+                    } label: {
+                        Label("Change Color", systemImage: "paintbrush")
                     }
-                    .alert(
-                        "Confirm Permanent Deletion",
-                        isPresented: Binding(
-                            get: { jobToDeletePermanently != nil },
-                            set: { if !$0 { jobToDeletePermanently = nil } }
-                        )
-                    ) {
-                        Button("Cancel", role: .cancel) { }
-                        Button("Delete Permanently", role: .destructive) {
-                            if let job = jobToDeletePermanently {
-                                modelContext.delete(job)
-                                try? modelContext.save()
-                            }
-                        }
-                    } message: {
-                        Text("This action cannot be undone.")
+                    .tint(.green)
+                }
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) { softDelete(job) } label: {
+                        Label("Delete", systemImage: "trash")
                     }
                 }
             }
+            .onDelete(perform: deleteJob)
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    @ViewBuilder
+    private var jobHistoryButton: some View {
+        if !deletedJobs.isEmpty {
+            Button { showJobHistory = true } label: {
+                HStack {
+                    Text("Job History").font(.subheadline)
+                    Image(systemName: "chevron.right").font(.subheadline)
+                }
+                .foregroundStyle(.blue)
+            }
+            .padding(.horizontal)
+            .padding(.bottom, 8)
         }
-        .sheet(isPresented: $showColorPicker) {
-            ColorPickerView(
-                selectedItem: Binding(
-                    get: { selectedJob },
-                    set: { if let job = $0 as? Job {
-                        selectedJob = job
-                        job.colorCode = job.colorCode // ping change
-                        try? modelContext.save()
-                    } }
-                ),
-                isPresented: $showColorPicker
-            )
-            .presentationDetents([.medium])
+    }
+
+    // MARK: - Toolbar
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            Menu {
+                Button("Settings") { showSettings = true }
+                Button("Option 1") { /* future */ }
+                Button("Option 2") { /* future */ }
+            } label: {
+                Label("Menu", systemImage: "line.horizontal.3")
+            }
         }
-        .preferredColorScheme(isDarkMode ? .dark : .light)
+        ToolbarItem(placement: .topBarTrailing) {
+            Button("Add Job", systemImage: "plus") { addJob() }
+        }
+    }
+
+    // MARK: - Alerts (extracted buttons/bindings)
+
+    private var deletionAlertFlag: Binding<Bool> {
+        Binding(
+            get: { jobToDeletePermanently != nil },
+            set: { if !$0 { jobToDeletePermanently = nil } }
+        )
+    }
+
+    @ViewBuilder
+    private var renameAlertButtons: some View {
+        TextField("New Title", text: $newJobTitle)
+        Button("Cancel", role: .cancel) {
+            isRenaming = false
+            jobToRename = nil
+            newJobTitle = ""
+        }
+        Button("Save") {
+            if let job = jobToRename {
+                job.title = newJobTitle
+                try? modelContext.save()
+            }
+            isRenaming = false
+            jobToRename = nil
+            newJobTitle = ""
+        }
+    }
+
+    @ViewBuilder
+    private var deletionAlertButtons: some View {
+        Button("Cancel", role: .cancel) { }
+        Button("Delete Permanently", role: .destructive) {
+            if let job = jobToDeletePermanently {
+                modelContext.delete(job)
+                try? modelContext.save()
+            }
+        }
+    }
+
+    // MARK: - Bindings
+
+    private var selectedItemBinding: Binding<Any?> {
+        Binding<Any?>(
+            get: { selectedJob },
+            set: { newValue in
+                if let job = newValue as? Job {
+                    selectedJob = job
+                    // "Ping" change to refresh views that read colorCode.
+                    job.colorCode = job.colorCode
+                    try? modelContext.save()
+                } else {
+                    selectedJob = nil
+                }
+            }
+        )
+    }
+
+    // MARK: - Actions
+
+    private func startRenaming(_ job: Job) {
+        jobToRename = job
+        newJobTitle = job.title
+        isRenaming = true
+    }
+
+    private func softDelete(_ job: Job) {
+        job.isDeleted = true
+        job.deletionDate = Date()
+        try? modelContext.save()
     }
 
     private func addJob() {
         let jobCount = jobs.count + 1
         let newJob = Job(title: "Job \(jobCount)")
         modelContext.insert(newJob)
-        do {
-            try modelContext.save()
-        } catch {
+        do { try modelContext.save() } catch {
             print("Error saving new job: \(error)")
         }
     }
@@ -210,16 +234,4 @@ struct HomeView: View {
         }
         try? modelContext.save()
     }
-
-    private func activeItemsCount(_ job: Job) -> Int {
-        let activeDeliverables = job.deliverables.filter { !$0.isCompleted }.count
-        let activeChecklistItems = job.checklistItems.filter { !$0.isCompleted }.count
-        return activeDeliverables + activeChecklistItems
-    }
 }
-/*
-#Preview {
-    HomeView()
-        .modelContainer(for: Job.self, inMemory: true)
-}
-*/

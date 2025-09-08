@@ -2,15 +2,17 @@ import SwiftUI
 
 struct NavLogoInset: View {
     var body: some View {
-        Image("nexusStack_logo")
-            .resizable()
-            .scaledToFit()
-            .frame(width: 28, height: 28)    // tweak 24–32 if you like
-            .renderingMode(.original)        // keep the asset’s colors
-            .accessibilityHidden(true)
-            .allowsHitTesting(false)         // never intercept taps/scroll
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(.trailing, 16)          // visually aligns with the + button’s trailing margin
-            .padding(.top, 2)                // a touch of breathing room
+        HStack {
+            Spacer()
+            Image("nexusStack_logo")
+                .renderingMode(.original)        // ← apply to Image itself
+                .resizable()
+                .aspectRatio(contentMode: .fit)  // or .scaledToFit()
+                .frame(width: 50, height: 50)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
+        }
+        .padding(.trailing, 16)  // align with trailing margin of the + button
+        .padding(.top, 1)        // small breathing room
     }
 }
