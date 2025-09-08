@@ -1,5 +1,3 @@
-//Setting sheet fixed
-// test commit 9/7 9:23pm ...
 import SwiftUI
 import SwiftData
 
@@ -7,6 +5,7 @@ struct HomeView: View {
     @Query(filter: #Predicate<Job> { !$0.isDeleted }) private var jobs: [Job]
     @Query(filter: #Predicate<Job> { $0.isDeleted }) private var deletedJobs: [Job]
     @Environment(\.modelContext) private var modelContext
+
     @State private var isRenaming = false
     @State private var jobToRename: Job?
     @State private var newJobTitle = ""
@@ -15,45 +14,48 @@ struct HomeView: View {
     @State private var selectedJob: Job? = nil
     @State private var showColorPicker = false
     @State private var showSettings = false
+
     @AppStorage("isDarkMode") private var isDarkMode = false
-    
+
     var body: some View {
         NavigationStack {
             VStack {
                 List {
                     ForEach(jobs) { job in
                         NavigationLink(destination: JobDetailView(job: job)) {
+                            // Card-style row
                             VStack(alignment: .leading, spacing: 8) {
                                 Text(job.title)
                                     .font(.headline)
                                 Text("Created: \(job.creationDate, format: .dateTime.day().month().year())")
                                     .font(.subheadline)
-                                    .foregroundStyle(.secondary) //remove for darker text
+                                    .foregroundStyle(.secondary)
                                 Text("\(activeItemsCount(job)) active items")
                                     .font(.caption)
                             }
                             .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading) // Extend bubble to full width, align text to left
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .background(
                                 RoundedRectangle(cornerRadius: 12)
                                     .fill(color(for: job.colorCode))
                             )
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
-                        .buttonStyle(PlainButtonStyle()) // Remove default button styling
+                        .buttonStyle(.plain)
                         .swipeActions(edge: .leading) {
-                            Button(action: {
+                            Button {
                                 jobToRename = job
                                 newJobTitle = job.title
                                 isRenaming = true
-                            }) {
+                            } label: {
                                 Label("Rename", systemImage: "pencil")
                             }
                             .tint(.blue)
-                            Button(action: {
+
+                            Button {
                                 selectedJob = job
                                 showColorPicker = true
-                            }) {
+                            } label: {
                                 Label("Change Color", systemImage: "paintbrush")
                             }
                             .tint(.green)
@@ -70,19 +72,14 @@ struct HomeView: View {
                     }
                     .onDelete(perform: deleteJob)
                 }
-                .navigationTitle(Text(".nexusStack").font(.system(.largeTitle, design: .rounded, weight: .semibold)))
+                .navigationTitle(".nexusStack")
+                .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
                         Menu {
-                            Button("Settings") {
-                                showSettings = true
-                            }
-                            Button("Option 1") {
-                                // Placeholder for future development
-                            }
-                            Button("Option 2") {
-                                // Placeholder for future development
-                            }
+                            Button("Settings") { showSettings = true }
+                            Button("Option 1") { /* future */ }
+                            Button("Option 2") { /* future */ }
                         } label: {
                             Label("Menu", systemImage: "line.horizontal.3")
                         }
@@ -110,6 +107,7 @@ struct HomeView: View {
                         newJobTitle = ""
                     }
                 }
+
                 if !deletedJobs.isEmpty {
                     Button(action: { showJobHistory = true }) {
                         HStack {
@@ -147,17 +145,18 @@ struct HomeView: View {
                             .navigationTitle("Job History")
                             .toolbar {
                                 ToolbarItem(placement: .topBarTrailing) {
-                                    Button("Done") {
-                                        showJobHistory = false
-                                    }
+                                    Button("Done") { showJobHistory = false }
                                 }
                             }
                         }
                     }
-                    .alert("Confirm Permanent Deletion", isPresented: Binding(
-                        get: { jobToDeletePermanently != nil },
-                        set: { if !$0 { jobToDeletePermanently = nil } }
-                    )) {
+                    .alert(
+                        "Confirm Permanent Deletion",
+                        isPresented: Binding(
+                            get: { jobToDeletePermanently != nil },
+                            set: { if !$0 { jobToDeletePermanently = nil } }
+                        )
+                    ) {
                         Button("Cancel", role: .cancel) { }
                         Button("Delete Permanently", role: .destructive) {
                             if let job = jobToDeletePermanently {
@@ -175,19 +174,22 @@ struct HomeView: View {
             SettingsView()
         }
         .sheet(isPresented: $showColorPicker) {
-            ColorPickerView(selectedItem: Binding(
-                get: { selectedJob },
-                set: { if let job = $0 as? Job {
-                    selectedJob = job
-                    job.colorCode = job.colorCode // Force refresh by reassigning
-                    try? modelContext.save()
-                } }
-            ), isPresented: $showColorPicker)
-                .presentationDetents([.medium])
+            ColorPickerView(
+                selectedItem: Binding(
+                    get: { selectedJob },
+                    set: { if let job = $0 as? Job {
+                        selectedJob = job
+                        job.colorCode = job.colorCode // ping change
+                        try? modelContext.save()
+                    } }
+                ),
+                isPresented: $showColorPicker
+            )
+            .presentationDetents([.medium])
         }
         .preferredColorScheme(isDarkMode ? .dark : .light)
     }
-    
+
     private func addJob() {
         let jobCount = jobs.count + 1
         let newJob = Job(title: "Job \(jobCount)")
@@ -198,7 +200,7 @@ struct HomeView: View {
             print("Error saving new job: \(error)")
         }
     }
-    
+
     private func deleteJob(at offsets: IndexSet) {
         for offset in offsets {
             let job = jobs[offset]
@@ -207,9 +209,7 @@ struct HomeView: View {
         }
         try? modelContext.save()
     }
-    
-    
-    
+
     private func activeItemsCount(_ job: Job) -> Int {
         let activeDeliverables = job.deliverables.filter { !$0.isCompleted }.count
         let activeChecklistItems = job.checklistItems.filter { !$0.isCompleted }.count
