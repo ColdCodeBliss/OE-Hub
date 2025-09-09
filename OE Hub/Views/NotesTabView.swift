@@ -3,28 +3,39 @@ import SwiftData
 
 struct NotesTabView: View {
     @Environment(\.modelContext) private var modelContext
+
     @State private var isAddingNote = false
     @State private var isEditingNote = false
     @State private var newNoteContent = ""
     @State private var newNoteSummary = ""
     @State private var selectedNote: Note? = nil
+
+    // New: drive the picker even when creating a note (selectedNote == nil)
+    @State private var editingColorIndex: Int = 0
+
     var job: Job
-    
+
+    // Keep your palette but ensure safe indexing everywhere
     private let colors: [Color] = [.red, .blue, .green, .orange, .yellow, .purple, .pink, .teal]
-    
+
     private var nextColorIndex: Int {
-        let usedIndices = job.notes.map { $0.colorIndex }
+        let usedIndices = Set(job.notes.map { $0.colorIndex })
         for index in 0..<colors.count {
-            if !usedIndices.contains(index) {
-                return index
-            }
+            if !usedIndices.contains(index) { return index }
         }
-        return (job.notes.count) % colors.count
+        return job.notes.count % colors.count
     }
-    
+
     var body: some View {
         VStack(spacing: 16) {
-            Button(action: { isAddingNote = true }) {
+            Button {
+                // Prepare a clean editor state
+                selectedNote = nil
+                newNoteContent = ""
+                newNoteSummary = ""
+                editingColorIndex = nextColorIndex
+                isAddingNote = true
+            } label: {
                 Text("New Note")
                     .font(.headline)
                     .frame(maxWidth: .infinity)
@@ -34,15 +45,18 @@ struct NotesTabView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .padding(.horizontal)
-            
+
             ScrollView {
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    ForEach(job.notes) { note in
+                    // Sort newest first for predictable ordering
+                    ForEach(job.notes.sorted(by: { $0.creationDate > $1.creationDate })) { note in
                         noteTile(for: note)
                             .onTapGesture {
                                 selectedNote = note
                                 newNoteContent = note.content
                                 newNoteSummary = note.summary
+                                // New: bind picker to existing color
+                                editingColorIndex = safeIndex(note.colorIndex)
                                 isEditingNote = true
                             }
                     }
@@ -52,13 +66,14 @@ struct NotesTabView: View {
         }
         .sheet(isPresented: Binding(
             get: { isAddingNote || isEditingNote },
-            set: { if !$0 { isAddingNote = false; isEditingNote = false } }
-        )) {
-            noteEditor
-        }
+            set: { if !$0 { dismissEditor() } }
+        )) { noteEditor }
         .navigationTitle("Notes")
+        .animation(.default, value: job.notes.count)
     }
-    
+
+    // MARK: - Editor
+
     @ViewBuilder
     private var noteEditor: some View {
         NavigationStack {
@@ -66,57 +81,33 @@ struct NotesTabView: View {
                 TextField("Summary (short description)", text: $newNoteSummary)
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
-                
+
                 TextEditor(text: $newNoteContent)
                     .frame(height: 200)
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .padding(.horizontal)
-                
-                Picker("Color", selection: Binding(
-                    get: { selectedNote?.colorIndex ?? nextColorIndex },
-                    set: { if let note = selectedNote { note.colorIndex = $0; try? modelContext.save() } }
-                )) {
+
+                Picker("Color", selection: $editingColorIndex) {
                     ForEach(0..<colors.count, id: \.self) { index in
                         Text(colorName(for: index)).tag(index)
                     }
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal)
-                
+
                 HStack {
-                    Button("Cancel") {
-                        isAddingNote = false
-                        isEditingNote = false
-                        newNoteContent = ""
-                        newNoteSummary = ""
-                        selectedNote = nil
-                    }
-                    .foregroundStyle(.red)
-                    
-                    Button("Save") {
-                        if !newNoteContent.isEmpty && !newNoteSummary.isEmpty {
-                            if let note = selectedNote {
-                                note.content = newNoteContent
-                                note.summary = newNoteSummary
-                                try? modelContext.save()
-                            } else {
-                                let newNote = Note(content: newNoteContent, summary: newNoteSummary, colorIndex: nextColorIndex)
-                                job.notes.append(newNote)
-                                try? modelContext.save()
-                            }
-                            isAddingNote = false
-                            isEditingNote = false
-                            newNoteContent = ""
-                            newNoteSummary = ""
-                            selectedNote = nil
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.green.opacity(0.8))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    Button("Cancel") { dismissEditor() }
+                        .foregroundStyle(.red)
+
+                    Button("Save") { saveNote() }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(.green.opacity(0.8))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .disabled(newNoteContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                  || newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 .padding(.horizontal)
             }
@@ -126,41 +117,68 @@ struct NotesTabView: View {
             .padding(.horizontal)
             .navigationTitle(selectedNote != nil ? "Edit Note" : "New Note")
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        isAddingNote = false
-                        isEditingNote = false
-                        newNoteContent = ""
-                        newNoteSummary = ""
-                        selectedNote = nil
-                    }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") { dismissEditor() }
                 }
             }
         }
     }
-    
+
+    // MARK: - Tiles
+
     private func noteTile(for note: Note) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let idx = safeIndex(note.colorIndex)
+        let bg = colors[idx]
+        let fg = readableForeground(on: bg)
+        return VStack(alignment: .leading, spacing: 8) {
             Text(note.summary)
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(fg)
             Text(note.creationDate, style: .date)
                 .font(.caption)
-                .foregroundStyle(.white.opacity(0.8))
+                .foregroundStyle(fg.opacity(0.85))
         }
         .padding()
         .frame(maxWidth: .infinity, minHeight: 100)
-        .background(colors[note.colorIndex].gradient)
+        .background(bg.gradient)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(.white.opacity(0.2), lineWidth: 1)
         )
         .shadow(radius: 5)
+        .accessibilityElement(children: .combine)
     }
-    
+
+    // MARK: - Helpers
+
+    private func saveNote() {
+        let trimmedSummary = newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedContent = newNoteContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSummary.isEmpty, !trimmedContent.isEmpty else { return }
+
+        if let note = selectedNote {
+            note.summary = trimmedSummary
+            note.content = trimmedContent
+            note.colorIndex = safeIndex(editingColorIndex)
+        } else {
+            let newNote = Note(content: trimmedContent, summary: trimmedSummary, colorIndex: safeIndex(editingColorIndex))
+            job.notes.append(newNote)
+        }
+        try? modelContext.save()
+        dismissEditor()
+    }
+
+    private func dismissEditor() {
+        isAddingNote = false
+        isEditingNote = false
+        newNoteContent = ""
+        newNoteSummary = ""
+        selectedNote = nil
+    }
+
     private func colorName(for index: Int) -> String {
-        switch index {
+        switch safeIndex(index) {
         case 0: return "Red"
         case 1: return "Blue"
         case 2: return "Green"
@@ -172,8 +190,13 @@ struct NotesTabView: View {
         default: return "Green"
         }
     }
-}
 
+    private func safeIndex(_ idx: Int) -> Int {
+        guard !colors.isEmpty else { return 0 }
+        return ((idx % colors.count) + colors.count) % colors.count
+    }
+}
+/*
 #Preview {
     do {
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
@@ -184,3 +207,4 @@ struct NotesTabView: View {
         fatalError("Failed to create preview container: \(error)")
     }
 }
+*/

@@ -10,38 +10,35 @@ import SwiftData
 struct ColorPickerView: View {
     @Binding var selectedItem: Any?
     @Binding var isPresented: Bool
+
+    // Keep your available palette; reuses Utilities.color(for:)
     let colors: [String] = ["red", "blue", "green", "yellow", "orange", "purple", "pink", "teal", "gray"]
+
     @Environment(\.modelContext) private var modelContext
-    
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
                 Text("Select Color")
-                    .font(.title2)
-                    .bold()
+                    .font(.title2).bold()
+
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 50))], spacing: 10) {
                     ForEach(colors, id: \.self) { colorName in
-                        Button(action: {
-                            if let job = selectedItem as? Job {
-                                job.colorCode = colorName
-                                try? modelContext.save()
-                            } else if let checklistItem = selectedItem as? ChecklistItem {
-                                checklistItem.priority = colorName.capitalized
-                                try? modelContext.save()
-                            } else if let deliverable = selectedItem as? Deliverable {
-                                deliverable.colorCode = colorName
-                                try? modelContext.save()
-                            }
+                        Button {
+                            apply(colorName)
                             isPresented = false
-                        }) {
+                        } label: {
                             Circle()
-                                .fill(color(for: colorName))
+                                .fill(color(for: colorName)) // from Utilities.swift
                                 .frame(width: 40, height: 40)
                                 .overlay(
                                     Circle()
-                                        .stroke(Color.black, lineWidth: 1)
-                                        .opacity((selectedItem as? Job)?.colorCode == colorName || (selectedItem as? ChecklistItem)?.priority.lowercased() == colorName || (selectedItem as? Deliverable)?.colorCode == colorName ? 1 : 0)
+                                        .strokeBorder(
+                                            isCurrentlySelected(colorName) ? Color.primary : .black.opacity(0.2),
+                                            lineWidth: isCurrentlySelected(colorName) ? 2 : 1
+                                        )
                                 )
+                                .accessibilityLabel(Text(colorName.capitalized))
                         }
                     }
                 }
@@ -50,26 +47,35 @@ struct ColorPickerView: View {
             .navigationTitle("Color Picker")
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") {
-                        isPresented = false
-                    }
+                    Button("Cancel") { isPresented = false }
                 }
             }
         }
     }
-    
-    private func color(for colorCode: String) -> Color {
-        switch colorCode.lowercased() {
-        case "red": return .red
-        case "blue": return .blue
-        case "green": return .green
-        case "yellow": return .yellow
-        case "orange": return .orange
-        case "purple": return .purple
-        case "pink": return .pink
-        case "teal": return .teal
-        case "gray": return .gray
-        default: return .green
+
+    // MARK: - Helpers
+
+    private func apply(_ colorName: String) {
+        if let job = selectedItem as? Job {
+            job.colorCode = colorName
+        } else if let checklistItem = selectedItem as? ChecklistItem {
+            // NOTE: Your app uses color names for priority; we keep that behavior.
+            // If you decide to restrict to {Green, Yellow, Red}, clamp here.
+            checklistItem.priority = colorName.capitalized
+        } else if let deliverable = selectedItem as? Deliverable {
+            deliverable.colorCode = colorName
         }
+        try? modelContext.save()
+    }
+
+    private func isCurrentlySelected(_ colorName: String) -> Bool {
+        if let job = selectedItem as? Job {
+            return (job.colorCode?.lowercased() ?? "") == colorName
+        } else if let checklistItem = selectedItem as? ChecklistItem {
+            return checklistItem.priority.lowercased() == colorName
+        } else if let deliverable = selectedItem as? Deliverable {
+            return (deliverable.colorCode?.lowercased() ?? "") == colorName
+        }
+        return false
     }
 }
