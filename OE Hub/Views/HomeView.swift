@@ -21,6 +21,13 @@ struct HomeView: View {
     @State private var showSettings = false
 
     @AppStorage("isDarkMode") private var isDarkMode = false
+    
+    private let heroLogoHeight: CGFloat = 120   // logo size
+    private let heroTopOffset: CGFloat = 0     // distance from button row
+    private let gapBelowLogo: CGFloat = 0      // tiny gap above first card
+    private let logoYOffset: CGFloat = -69   // negative lifts the logo closer to the buttons
+    private let listGapBelowLogo: CGFloat = -22 // tiny space between logo and first card
+
 
     // MARK: - Init: move #Predicate here (reduces compiler load)
     init() {
@@ -34,20 +41,35 @@ struct HomeView: View {
         )
     }
 
+    // ...everything above stays the same...
+
     var body: some View {
         NavigationStack {
             VStack {
-                jobList           // extracted for clarity
-                jobHistoryButton  // lightweight conditional
+                jobList
+                jobHistoryButton
             }
-            .navigationTitle("")                              // we render the title row ourselves
-            .navigationBarTitleDisplayMode(.inline)          // was .large
+            // Push content down just enough so it sits under the overlayed logo
+            .padding(.top, max(0, heroLogoHeight + heroTopOffset + listGapBelowLogo + logoYOffset))
+
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
-            .safeAreaInset(edge: .top, spacing: 0) { TitleRowInset() }     // ← title + logo BELOW button row
+
+            // Draw the logo on top (doesn't take layout space)
+            .overlay(alignment: .top) {
+                HeroLogoRow(height: heroLogoHeight)
+                    .padding(.top, heroTopOffset)   // distance from button row
+                    .padding(.horizontal, 16)
+                    .offset(y: logoYOffset)         // lift the logo up (negative values)
+                    .allowsHitTesting(false)
+                    .zIndex(1)
+            }
 
             .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
 
-            // Sheets
+
+            // sheets & alerts (unchanged)
             .sheet(isPresented: $showJobHistory) {
                 JobHistorySheetView(
                     deletedJobs: deletedJobs,
@@ -55,21 +77,15 @@ struct HomeView: View {
                     onDone: { showJobHistory = false }
                 )
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
+            .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showColorPicker) {
                 ColorPickerView(
-                    selectedItem: selectedItemBinding, // extracted binding (no heavy inline closures)
+                    selectedItem: selectedItemBinding,
                     isPresented: $showColorPicker
                 )
                 .presentationDetents([.medium])
             }
-
-            // Alerts
-            .alert("Rename Job", isPresented: $isRenaming) {  // simpler overload
-                renameAlertButtons
-            }
+            .alert("Rename Job", isPresented: $isRenaming) { renameAlertButtons }
             .alert("Confirm Permanent Deletion", isPresented: deletionAlertFlag) {
                 deletionAlertButtons
             } message: {
@@ -78,6 +94,7 @@ struct HomeView: View {
         }
         .preferredColorScheme(isDarkMode ? .dark : .light)
     }
+
 
     // MARK: - Subviews
 
