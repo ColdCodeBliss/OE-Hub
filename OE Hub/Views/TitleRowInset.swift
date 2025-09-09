@@ -1,16 +1,18 @@
-//
-//  TitleRowInset.swift
-//  OE Hub
-//
-//  Created by Ryan Bliss on 9/8/25.
-//
-
-
 import SwiftUI
+import UIKit
 
 struct TitleRowInset: View {
-    // Keeps the logo height tracking the large title size (Dynamic Type friendly)
-    @ScaledMetric(relativeTo: .largeTitle) private var logoHeight: CGFloat = 30
+    /// Scale for the logo relative to the system large-title cap height.
+    /// Keep 1.05–1.30 for near-match; larger values are OK, but you may need a baseline nudge.
+    var logoScale: CGFloat = 3
+
+    /// Positive values move the logo *down* a bit to match the text baseline optically.
+    @ScaledMetric(relativeTo: .largeTitle) private var baselineNudge: CGFloat = 2
+
+    private var logoHeight: CGFloat {
+        let font = UIFont.preferredFont(forTextStyle: .largeTitle)
+        return font.capHeight * logoScale
+    }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -22,14 +24,18 @@ struct TitleRowInset: View {
             Spacer()
 
             Image("nexusStack_logo")
-                .renderingMode(.original)        // preserve asset colors
+                .renderingMode(.original)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(height: logoHeight)       // ~same visual height as the title text
+                .frame(height: logoHeight)
+                // Align the image's baseline to its *bottom* so it sits with the text baseline
+                .alignmentGuide(.firstTextBaseline) { d in d[.bottom] }
+                // Fine-tune downwards (increase if the logo still looks a touch high)
+                .offset(y: baselineNudge)
                 .accessibilityHidden(true)
         }
-        .padding(.horizontal, 16)                // align with nav bar margins
-        .padding(.top, 4)
-        .padding(.bottom, 4)
+        .padding(.horizontal, 16)
+        .padding(.top, 0)
+        .padding(.bottom, 2)
     }
 }

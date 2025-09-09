@@ -40,10 +40,11 @@ struct HomeView: View {
                 jobList           // extracted for clarity
                 jobHistoryButton  // lightweight conditional
             }
-            .navigationTitle(".nexusStack")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle("")                              // we render the title row ourselves
+            .navigationBarTitleDisplayMode(.inline)          // was .large
             .toolbar { toolbarContent }
-            .safeAreaInset(edge: .top, spacing: 0) { NavLogoInset() }  // right-aligned logo under the +
+            .safeAreaInset(edge: .top, spacing: 0) { TitleRowInset() }     // ← title + logo BELOW button row
+
             .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
 
             // Sheets
