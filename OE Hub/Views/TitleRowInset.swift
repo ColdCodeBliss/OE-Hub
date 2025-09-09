@@ -15,7 +15,7 @@ struct TitleRowInset: View {
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        HStack(alignment: .center, spacing: 8) {
             Text(".nexusStack")
                 .font(.system(.largeTitle, design: .rounded).weight(.semibold))
                 .lineLimit(1)
