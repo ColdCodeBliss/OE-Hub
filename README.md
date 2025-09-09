@@ -13,7 +13,7 @@ Features
 
 Installation
 
-    Clone the repository: git clone https://github.com/ColdCodeBliss/WorkForge.git
+    Clone the repository: git clone https://github.com/ColdCodeBliss/OE-Hub.git
     Open the project in Xcode.
     Ensure you have Xcode 18.4 or later installed.
     Build and run on an iPhone simulator (e.g., iPhone 16).
@@ -27,7 +27,7 @@ Usage
 
 Requirements
 
-    iOS 18.4 or higher
+    iOS 18.0 or higher
     Xcode 18.4
     Swift 5
 
