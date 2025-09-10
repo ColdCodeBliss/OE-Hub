@@ -2,54 +2,70 @@ import SwiftUI
 
 struct SettingsView: View {
     @AppStorage("isDarkMode") private var isDarkMode = false
+    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
     @State private var showDonateSheet = false
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Appearance") {
+                // MARK: - Appearance
+                Section(header: Text("Appearance")) {
                     Toggle("Dark Mode", isOn: $isDarkMode)
-                }
-                Section("Support") {
-                    Link("Contact Support", destination: URL(string: "mailto:support@workforge.app")!)
-                        .accessibilityLabel("Contact Support via Email")
 
+                    if #available(iOS 18.0, *) {
+                        Toggle("Liquid Glass", isOn: $isLiquidGlassEnabled)
+                    } else {
+                        Toggle("Liquid Glass (iOS 18+)", isOn: .constant(false))
+                            .disabled(true)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                // MARK: - Support
+                Section(header: Text("Support")) {
+                    Link("Contact Support", destination: URL(string: "mailto:support@workforge.app")!)
                     Button("Donate") { showDonateSheet = true }
-                        .accessibilityLabel("Open Donate Sheet")
+                }
+
+                // MARK: - About
+                Section(footer:
+                    Text("NexusForge Stack helps OE professionals manage jobs, deliverables, and checklists efficiently.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                ) {
+                    EmptyView()
                 }
             }
             .navigationTitle("Settings")
             .sheet(isPresented: $showDonateSheet) {
                 DonateSheet()
+                    .presentationDetents([.medium, .large])
             }
         }
-        .preferredColorScheme(isDarkMode ? .dark : .light)
     }
 }
 
-struct DonateSheet: View {
+// MARK: - Simple donate sheet (unchanged behavior)
+private struct DonateSheet: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Please consider donating to support the app")
-                .font(.headline)
+        VStack(spacing: 16) {
+            Text("Support Development")
+                .font(.title2.bold())
+            Text("If you find value in NexusForge Stack, consider a small donation. Thank you!")
                 .multilineTextAlignment(.center)
-                .padding()
+                .foregroundStyle(.secondary)
 
-            // TODO: replace placeholder with your actual Venmo link
-            Link("Donate via Venmo", destination: URL(string: "https://x.com")!)
+            Link("Open Venmo", destination: URL(string: "https://venmo.com/")!)
                 .font(.body)
                 .padding()
                 .background(Color.blue.opacity(0.8))
                 .foregroundStyle(.white)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
-                .accessibilityLabel("Donate via Venmo")
         }
         .padding()
-        .presentationDetents([.medium])
     }
 }
-/*
+
 #Preview {
     SettingsView()
 }
-*/
