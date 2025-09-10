@@ -13,6 +13,9 @@ struct NotesTabView: View {
     // New: drive the picker even when creating a note (selectedNote == nil)
     @State private var editingColorIndex: Int = 0
 
+    // Toggle comes from SettingsView ("Liquid Glass")
+    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
+
     var job: Job
 
     // Keep your palette but ensure safe indexing everywhere
@@ -55,7 +58,7 @@ struct NotesTabView: View {
                                 selectedNote = note
                                 newNoteContent = note.content
                                 newNoteSummary = note.summary
-                                // New: bind picker to existing color
+                                // Bind picker to existing color
                                 editingColorIndex = safeIndex(note.colorIndex)
                                 isEditingNote = true
                             }
@@ -128,8 +131,9 @@ struct NotesTabView: View {
 
     private func noteTile(for note: Note) -> some View {
         let idx = safeIndex(note.colorIndex)
-        let bg = colors[idx]
-        let fg = readableForeground(on: bg)
+        let tint = colors[idx]
+        let fg = readableForeground(on: tint)
+
         return VStack(alignment: .leading, spacing: 8) {
             Text(note.summary)
                 .font(.headline)
@@ -140,14 +144,44 @@ struct NotesTabView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, minHeight: 100)
-        .background(bg.gradient)
+        .background(tileBackground(tint: tint))              // ← conditional glass vs solid
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(.white.opacity(0.2), lineWidth: 1)
-        )
-        .shadow(radius: 5)
+        .overlay(tileStroke)                                  // subtle rim light
+        .shadow(radius: isLiquidGlassEnabled ? 2 : 5)         // lighter shadow when glassy
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private func tileBackground(tint: Color) -> some View {
+        if isLiquidGlassEnabled {
+            // SDK-safe “glass-like” look: material base + tinted glaze + soft highlight
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(tint.opacity(0.55))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.18), .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.plusLighter)
+                )
+        } else {
+            // 🔧 Fix: return a View, not a ShapeStyle
+            RoundedRectangle(cornerRadius: 16)
+                .fill(tint.gradient)
+        }
+    }
+
+    private var tileStroke: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(isLiquidGlassEnabled ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
     }
 
     // MARK: - Helpers
