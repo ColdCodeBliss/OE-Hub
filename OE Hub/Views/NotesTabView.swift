@@ -10,11 +10,12 @@ struct NotesTabView: View {
     @State private var newNoteSummary = ""
     @State private var selectedNote: Note? = nil
 
-    // New: drive the picker even when creating a note (selectedNote == nil)
+    // Drive the picker even when creating a note (selectedNote == nil)
     @State private var editingColorIndex: Int = 0
 
-    // Toggle comes from SettingsView ("Liquid Glass")
-    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
+    // Toggles from Settings
+    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real (iOS 18+)
 
     var job: Job
 
@@ -67,15 +68,36 @@ struct NotesTabView: View {
                 .padding()
             }
         }
+        // OLD editor sheet shown only when Beta is OFF
         .sheet(isPresented: Binding(
-            get: { isAddingNote || isEditingNote },
+            get: { (isAddingNote || isEditingNote) && !isBetaGlassEnabled },
             set: { if !$0 { dismissEditor() } }
         )) { noteEditor }
+
+        // NEW floating editor panel when Beta is ON
+        .overlay {
+            if (isAddingNote || isEditingNote) && isBetaGlassEnabled {
+                NoteEditorPanel(
+                    isPresented: Binding(
+                        get: { isAddingNote || isEditingNote },
+                        set: { if !$0 { dismissEditor() } }
+                    ),
+                    title: (selectedNote != nil ? "Edit Note" : "New Note"),
+                    summary: $newNoteSummary,
+                    content: $newNoteContent,
+                    colors: colors,
+                    colorIndex: $editingColorIndex,
+                    onCancel: { dismissEditor() },
+                    onSave: { saveNote() }
+                )
+                .zIndex(2)
+            }
+        }
         .navigationTitle("Notes")
         .animation(.default, value: job.notes.count)
     }
 
-    // MARK: - Editor
+    // MARK: - Editor (used only for the non-Beta sheet)
 
     @ViewBuilder
     private var noteEditor: some View {
@@ -132,7 +154,11 @@ struct NotesTabView: View {
     private func noteTile(for note: Note) -> some View {
         let idx = safeIndex(note.colorIndex)
         let tint = colors[idx]
-        let fg = readableForeground(on: tint)
+        // let fg = readableForeground(on: tint)  //dynamic contrast text color
+        let fg: Color = .black   // always black
+
+        let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
+        let radius: CGFloat = 16
 
         return VStack(alignment: .leading, spacing: 8) {
             Text(note.summary)
@@ -144,25 +170,49 @@ struct NotesTabView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, minHeight: 100)
-        .background(tileBackground(tint: tint))              // ← conditional glass vs solid
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(tileStroke)                                  // subtle rim light
-        .shadow(radius: isLiquidGlassEnabled ? 2 : 5)         // lighter shadow when glassy
+        .background(tileBackground(tint: tint, radius: radius))      // ← conditional (Beta/Classic/Solid)
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(isGlass ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
+        )
+        // Floating “bubble” shadow only in glass modes
+        .shadow(color: (isGlass ? Color.black.opacity(0.25) : Color.black.opacity(0.15)),
+                radius: (isGlass ? 14 : 5), x: 0, y: (isGlass ? 8 : 0))
         .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
-    private func tileBackground(tint: Color) -> some View {
-        if isLiquidGlassEnabled {
-            // SDK-safe “glass-like” look: material base + tinted glaze + soft highlight
-            RoundedRectangle(cornerRadius: 16)
+    private func tileBackground(tint: Color, radius: CGFloat) -> some View {
+        if #available(iOS 18.0, *), isBetaGlassEnabled {
+            // ✅ Real Liquid Glass (iOS 18+): glass bubble with gentle highlight
+            ZStack {
+                Color.clear
+                    .glassEffect(
+                        .regular
+                            .tint(tint.opacity(0.55)),
+                        in: .rect(cornerRadius: radius)
+                    )
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.18), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blendMode(.plusLighter)
+            }
+        } else if isLiquidGlassEnabled {
+            // 🌈 Classic glassy fallback (SDK-safe): material base + tinted glaze + soft highlight
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .fill(tint.opacity(0.55))
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [Color.white.opacity(0.18), .clear],
@@ -173,15 +223,10 @@ struct NotesTabView: View {
                         .blendMode(.plusLighter)
                 )
         } else {
-            // 🔧 Fix: return a View, not a ShapeStyle
-            RoundedRectangle(cornerRadius: 16)
+            // 🎨 Original solid/tinted look
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(tint.gradient)
         }
-    }
-
-    private var tileStroke: some View {
-        RoundedRectangle(cornerRadius: 16)
-            .stroke(isLiquidGlassEnabled ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
     }
 
     // MARK: - Helpers

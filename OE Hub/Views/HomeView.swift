@@ -21,13 +21,13 @@ struct HomeView: View {
     @State private var showSettings = false
 
     @AppStorage("isDarkMode") private var isDarkMode = false
-    
-    private let heroLogoHeight: CGFloat = 120   // logo size
-    private let heroTopOffset: CGFloat = 0     // distance from button row
-    private let gapBelowLogo: CGFloat = 0      // tiny gap above first card
-    private let logoYOffset: CGFloat = -69   // negative lifts the logo closer to the buttons
-    private let listGapBelowLogo: CGFloat = -25 // tiny space between logo and first card
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
+    private let heroLogoHeight: CGFloat = 120   // logo size
+    private let heroTopOffset: CGFloat = 0      // distance from button row
+    private let gapBelowLogo: CGFloat = 0       // tiny gap above first card
+    private let logoYOffset: CGFloat = -69      // negative lifts the logo closer to the buttons
+    private let listGapBelowLogo: CGFloat = -25 // tiny space between logo and first card
 
     // MARK: - Init: move #Predicate here (reduces compiler load)
     init() {
@@ -40,8 +40,6 @@ struct HomeView: View {
             sort: [SortDescriptor(\.deletionDate, order: .reverse)]
         )
     }
-
-    // ...everything above stays the same...
 
     var body: some View {
         NavigationStack {
@@ -68,8 +66,7 @@ struct HomeView: View {
 
             .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
 
-
-            // sheets & alerts (unchanged)
+            // sheets & alerts (unchanged except Settings presentation split below)
             .sheet(isPresented: $showJobHistory) {
                 JobHistorySheetView(
                     deletedJobs: deletedJobs,
@@ -77,7 +74,15 @@ struct HomeView: View {
                     onDone: { showJobHistory = false }
                 )
             }
-            .sheet(isPresented: $showSettings) { SettingsView() }
+
+            // ❗️Settings: present as a normal sheet when Beta Glass is OFF
+            .sheet(isPresented: Binding(
+                get: { showSettings && !isBetaGlassEnabled },
+                set: { if !$0 { showSettings = false } }
+            )) {
+                SettingsView()
+            }
+
             .sheet(isPresented: $showColorPicker) {
                 ColorPickerView(
                     selectedItem: selectedItemBinding,
@@ -91,10 +96,17 @@ struct HomeView: View {
             } message: {
                 Text("This action cannot be undone.")
             }
+
+            // ❗️Settings: present as a floating glass panel when Beta Glass is ON
+            .overlay {
+                if showSettings && isBetaGlassEnabled {
+                    SettingsPanel(isPresented: $showSettings)
+                        .zIndex(2) // keep above everything else
+                }
+            }
         }
         .preferredColorScheme(isDarkMode ? .dark : .light)
     }
-
 
     // MARK: - Subviews
 
@@ -124,6 +136,9 @@ struct HomeView: View {
                         Label("Delete", systemImage: "trash")
                     }
                 }
+                // ⬇️ Optional tweaks for the floating “bubble” look
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
             .onDelete(perform: deleteJob)
         }

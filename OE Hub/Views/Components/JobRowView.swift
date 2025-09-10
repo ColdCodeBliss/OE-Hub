@@ -3,9 +3,16 @@ import SwiftData
 
 struct JobRowView: View {
     let job: Job
+
+    // Classic (fallback) and Beta (real Liquid Glass) toggles
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
+
+    private let radius: CGFloat = 20
 
     var body: some View {
+        let tint = color(for: job.colorCode)
+
         VStack(alignment: .leading, spacing: 8) {
             Text(job.title)
                 .font(.headline)
@@ -17,41 +24,82 @@ struct JobRowView: View {
             Text("\(activeItemsCount(job)) active items")
                 .font(.caption)
         }
-        .padding()
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(backgroundView)                  // conditional “glass”
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .background(cardBackground(tint: tint))                     // ← bubble styles here
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        // “Floating bubble” shadow
+        .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
+        .padding(.vertical, 2)
     }
 
-    // MARK: - Background (SDK-safe glassy look)
+    // MARK: - Backgrounds (Beta → real Liquid Glass; Classic → material; else solid)
 
     @ViewBuilder
-    private var backgroundView: some View {
-        let tint = color(for: job.colorCode)
-
-        if isLiquidGlassEnabled {
-            // Material base + tinted overlay ≈ glass card (works on iOS 15+)
-            RoundedRectangle(cornerRadius: 12)
+    private func cardBackground(tint: Color) -> some View {
+        if #available(iOS 18.0, *), isBetaGlassEnabled {
+            // ✅ Real Liquid Glass (iOS 18+)
+            ZStack {
+                Color.clear
+                    .glassEffect(
+                        .regular.tint(tint.opacity(0.75)),
+                        in: .rect(cornerRadius: radius)
+                    )
+                // soft highlight for depth (keeps “bubble” vibe)
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.15), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blendMode(.plusLighter)
+            }
+        } else if isLiquidGlassEnabled {
+            // 🌈 Classic glassy fallback (SDK-safe)
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .fill(tint.opacity(0.55))
                 )
                 .overlay(
-                    // gentle rim light for depth
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(.white.opacity(0.10), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.15), .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.plusLighter)
                 )
         } else {
-            // Your previous solid/tinted look
-            RoundedRectangle(cornerRadius: 12)
+            // 🎨 Original solid/tinted look
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(tint)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(.black.opacity(0.06), lineWidth: 1)
-                )
         }
     }
+
+    private var borderColor: Color {
+        (isBetaGlassEnabled || isLiquidGlassEnabled)
+        ? .white.opacity(0.10)
+        : .black.opacity(0.06)
+    }
+
+    private var shadowColor: Color {
+        (isBetaGlassEnabled || isLiquidGlassEnabled)
+        ? .black.opacity(0.25)
+        : .black.opacity(0.15)
+    }
+
+    private var shadowRadius: CGFloat { (isBetaGlassEnabled || isLiquidGlassEnabled) ? 14 : 5 }
+    private var shadowY: CGFloat { (isBetaGlassEnabled || isLiquidGlassEnabled) ? 8 : 0 }
 
     // MARK: - Helpers
 
