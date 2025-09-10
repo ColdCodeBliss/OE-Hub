@@ -44,6 +44,7 @@ struct NoteEditorPanel: View {
                 // Content
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        // Summary
                         Group {
                             Text("Summary")
                                 .font(.subheadline.weight(.semibold))
@@ -52,6 +53,7 @@ struct NoteEditorPanel: View {
                                 .textFieldStyle(.roundedBorder)
                         }
 
+                        // Content
                         Group {
                             Text("Content")
                                 .font(.subheadline.weight(.semibold))
@@ -63,22 +65,40 @@ struct NoteEditorPanel: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
 
+                        // Color – grid of dots (replaces Picker(.menu))
                         Group {
                             Text("Color")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
 
-                            Picker("Color", selection: $colorIndex) {
-                                ForEach(0..<colors.count, id: \.self) { i in
-                                    HStack {
-                                        Circle().fill(colors[i]).frame(width: 14, height: 14)
-                                        Text(colorName(for: i))
-                                    }.tag(i)
+                            let columns = [GridItem(.adaptive(minimum: 44, maximum: 56), spacing: 10)]
+                            LazyVGrid(columns: columns, spacing: 12) {
+                                ForEach(colors.indices, id: \.self) { i in
+                                    Button {
+                                        withAnimation(.easeInOut(duration: 0.15)) {
+                                            colorIndex = i
+                                        }
+                                    } label: {
+                                        Circle()
+                                            .fill(colors[i])
+                                            .frame(width: 40, height: 40)
+                                            .overlay(
+                                                Circle()
+                                                    .strokeBorder(
+                                                        i == colorIndex ? Color.primary : .black.opacity(0.2),
+                                                        lineWidth: i == colorIndex ? 2 : 1
+                                                    )
+                                            )
+                                            .accessibilityLabel(Text(colorName(for: i)))
+                                            .accessibilityAddTraits(i == colorIndex ? .isSelected : [])
+                                    }
+                                    .buttonStyle(.plain)
                                 }
                             }
-                            .pickerStyle(.menu)
+                            .padding(.top, 2)
                         }
 
+                        // Actions
                         HStack(spacing: 12) {
                             Button("Cancel") { onCancel(); dismiss() }
                                 .foregroundStyle(.red)
@@ -125,7 +145,7 @@ struct NoteEditorPanel: View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 20))
         } else {
-            // If Beta somehow unavailable, keep a premium material look
+            // If Beta unavailable, keep a premium material look
             RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
         }
     }

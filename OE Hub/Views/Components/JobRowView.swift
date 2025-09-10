@@ -46,7 +46,7 @@ struct JobRowView: View {
             ZStack {
                 Color.clear
                     .glassEffect(
-                        .regular.tint(tint.opacity(0.50)),
+                        .regular.tint(tint.opacity(0.75)),
                         in: .rect(cornerRadius: radius)
                     )
                 // soft highlight for depth (keeps “bubble” vibe)
