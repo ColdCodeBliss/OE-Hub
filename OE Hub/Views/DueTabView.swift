@@ -190,6 +190,8 @@ struct DueTabView: View {
                 let tint = color(for: deliverable.colorCode)
                 let radius: CGFloat = 12
                 let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
+                let hasReminders = !deliverable.reminderOffsets.isEmpty   // or !deliverable.reminderSet.isEmpty
+
 
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -232,7 +234,7 @@ struct DueTabView: View {
                             .padding(8)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(readableForeground(on: tint))
+                    .foregroundStyle(hasReminders ? Color.black : Color.white) //white bell no reminder, black has reminder
                     .accessibilityLabel("Set reminders")
                 }
                 .padding()
@@ -351,6 +353,7 @@ struct DueTabView: View {
     @ViewBuilder
     private func rowBackground(tint: Color, radius: CGFloat) -> some View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
+            // ✅ Real Liquid Glass (iOS 18+): glass bubble with gentle highlight
             ZStack {
                 Color.clear
                     .glassEffect(

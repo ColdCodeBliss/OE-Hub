@@ -190,7 +190,7 @@ struct NotesTabView: View {
                 Color.clear
                     .glassEffect(
                         .regular
-                            .tint(tint.opacity(0.75)),
+                            .tint(tint.opacity(0.55)),
                         in: .rect(cornerRadius: radius)
                     )
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
