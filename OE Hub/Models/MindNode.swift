@@ -17,10 +17,12 @@ final class MindNode: Identifiable {
     var y: Double
     var isRoot: Bool
 
-    // Relationships
-    @Relationship(inverse: \MindNode.children) var parent: MindNode?
-    @Relationship(inverse: \MindNode.parent)   var children: [MindNode] = []
-    @Relationship(inverse: \Job.mindNodes)     var job: Job?
+    // Relationships (one-sided annotations to avoid circular macro resolution)
+    var parent: MindNode?
+    @Relationship(inverse: \MindNode.parent) var children: [MindNode] = []   // ← annotate only this side
+
+    // Job owner – plain optional; inverse is defined on Job.mindNodes
+    var job: Job?
 
     // Metadata
     var createdAt: Date

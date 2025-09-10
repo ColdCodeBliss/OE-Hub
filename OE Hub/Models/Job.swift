@@ -18,6 +18,11 @@ final class Job {
 
     @Relationship(deleteRule: .cascade, inverse: \Note.job)
     var notes: [Note] = []
+    
+    @Relationship(deleteRule: .cascade, inverse: \MindNode.job)
+    var mindNodes: [MindNode] = []
+    
+
 
     // Info
     var email: String?

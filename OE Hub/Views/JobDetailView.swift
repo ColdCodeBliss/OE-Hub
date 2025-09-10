@@ -26,6 +26,9 @@ struct JobDetailView: View {
                 job: job
             )
             .tabItem { Label("Checklist", systemImage: "checkmark.square") }
+            
+            MindMapTabView(job: job)
+                .tabItem { Label("Mind Map", systemImage: "point.topleft.down.curvedto.point.bottomright.up") }
 
             NotesTabView(job: job)
                 .tabItem { Label("Notes", systemImage: "note.text") }
