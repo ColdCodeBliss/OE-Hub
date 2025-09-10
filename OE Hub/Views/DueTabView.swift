@@ -17,6 +17,10 @@ struct DueTabView: View {
     @State private var showColorPicker = false
     @State private var showReminderPicker = false
 
+    // Liquid Glass toggles
+    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic (fallback)
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real Liquid Glass (iOS 18+)
+
     // Computed once per render; avoids repeating filter logic and keeps indices consistent
     private var activeDeliverables: [Deliverable] {
         job.deliverables
@@ -92,9 +96,22 @@ struct DueTabView: View {
             )
             .presentationDetents([.medium])
         }
-        .sheet(isPresented: $showReminderPicker) {
+        // Split: sheet vs floating panel for reminders (you added earlier)
+        .sheet(isPresented: Binding(
+            get: { showReminderPicker && !isBetaGlassEnabled },
+            set: { if !$0 { showReminderPicker = false } }
+        )) {
             ReminderPickerView(selectedDeliverable: $selectedDeliverable, isPresented: $showReminderPicker)
                 .presentationDetents([.medium])
+        }
+        .overlay {
+            if showReminderPicker && isBetaGlassEnabled {
+                ReminderPickerPanel(
+                    selectedDeliverable: $selectedDeliverable,
+                    isPresented: $showReminderPicker
+                )
+                .zIndex(3)
+            }
         }
     }
 
@@ -170,25 +187,42 @@ struct DueTabView: View {
     private var activeDeliverablesSection: some View {
         Section(header: Text("Active Deliverables")) {
             ForEach(activeDeliverables) { deliverable in
-                HStack {
-                    VStack(alignment: .leading) {
+                let tint = color(for: deliverable.colorCode)
+                let radius: CGFloat = 12
+                let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
+
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 8) {
                         Text(deliverable.taskDescription)
                             .font(.headline)
                             .foregroundStyle(.primary)
 
-                        DatePicker("Due", selection: Binding(
-                            get: { deliverable.dueDate },
-                            set: { newValue in
-                                deliverable.dueDate = newValue
-                                try? modelContext.save()
-                                updateNotifications(for: deliverable)
-                            }
-                        ), displayedComponents: [.date, .hourAndMinute])
-                        .datePickerStyle(.compact)
-                        .foregroundStyle(.secondary)
+                        // ✅ Keep "Due" and the compact chips on ONE ROW
+                        HStack(spacing: 8) {
+                            Text("Due")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+
+                            DatePicker(
+                                "",
+                                selection: Binding(
+                                    get: { deliverable.dueDate },
+                                    set: { newValue in
+                                        deliverable.dueDate = newValue
+                                        try? modelContext.save()
+                                        updateNotifications(for: deliverable)
+                                    }
+                                ),
+                                displayedComponents: [.date, .hourAndMinute]
+                            )
+                            .labelsHidden()                 // hide built-in label
+                            .datePickerStyle(.compact)      // two “chip” controls (date + time)
+                            .fixedSize()                    // prevent vertical wrapping
+                            .accessibilityLabel("Due date")
+                        }
                     }
 
-                    Spacer()
+                    Spacer(minLength: 8)
 
                     Button {
                         selectedDeliverable = deliverable
@@ -198,15 +232,20 @@ struct DueTabView: View {
                             .padding(8)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(readableForeground(on: color(for: deliverable.colorCode)))
+                    .foregroundStyle(readableForeground(on: tint))
                     .accessibilityLabel("Set reminders")
                 }
                 .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(color(for: deliverable.colorCode))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(rowBackground(tint: tint, radius: radius)) // ← glass/solid
+                .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .stroke(isGlass ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
                 )
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: isGlass ? .black.opacity(0.25) : .black.opacity(0.15),
+                        radius: isGlass ? 14 : 5, x: 0, y: isGlass ? 8 : 0)
+
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button {
                         deliverable.isCompleted = true
@@ -238,9 +277,13 @@ struct DueTabView: View {
                         Label("Delete", systemImage: "trash")
                     }
                 }
+
+                // Float over the list background
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
             .onDelete { offsets in
-                // FIX: Offsets refer to activeDeliverables, not job.deliverables.
+                // Offsets refer to activeDeliverables, not job.deliverables.
                 let toRemove = offsets.compactMap { activeDeliverables[safe: $0] }
                 for d in toRemove {
                     if let idx = job.deliverables.firstIndex(of: d) {
@@ -260,6 +303,10 @@ struct DueTabView: View {
         NavigationStack {
             List {
                 ForEach(completedDeliverables) { deliverable in
+                    let tint = color(for: deliverable.colorCode)
+                    let radius: CGFloat = 12
+                    let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
+
                     VStack(alignment: .leading, spacing: 6) {
                         Text(deliverable.taskDescription)
                             .font(.headline)
@@ -269,11 +316,15 @@ struct DueTabView: View {
                             .foregroundStyle(.secondary)
                     }
                     .padding()
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(color(for: deliverable.colorCode))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(rowBackground(tint: tint, radius: radius))
+                    .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .stroke(isGlass ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(color: isGlass ? .black.opacity(0.25) : .black.opacity(0.15),
+                            radius: isGlass ? 14 : 5, x: 0, y: isGlass ? 8 : 0)
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             deliverableToDeletePermanently = deliverable
@@ -281,14 +332,62 @@ struct DueTabView: View {
                             Label("Total Deletion", systemImage: "trash.fill")
                         }
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
                 }
             }
+            .scrollContentBackground(.hidden)
             .navigationTitle("Completed Deliverables")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { showCompletedDeliverables = false }
                 }
             }
+        }
+    }
+
+    // MARK: - Background selector
+
+    @ViewBuilder
+    private func rowBackground(tint: Color, radius: CGFloat) -> some View {
+        if #available(iOS 18.0, *), isBetaGlassEnabled {
+            ZStack {
+                Color.clear
+                    .glassEffect(
+                        .regular.tint(tint.opacity(0.50)),
+                        in: .rect(cornerRadius: radius)
+                    )
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.18), .clear],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blendMode(.plusLighter)
+            }
+        } else if isLiquidGlassEnabled {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(tint.opacity(0.55))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.18), .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .blendMode(.plusLighter)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(tint)
         }
     }
 }

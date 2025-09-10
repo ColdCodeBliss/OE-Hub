@@ -154,7 +154,8 @@ struct NotesTabView: View {
     private func noteTile(for note: Note) -> some View {
         let idx = safeIndex(note.colorIndex)
         let tint = colors[idx]
-        let fg = readableForeground(on: tint)
+        // let fg = readableForeground(on: tint)  //dynamic contrast text color
+        let fg: Color = .black   // always black
 
         let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
         let radius: CGFloat = 16
