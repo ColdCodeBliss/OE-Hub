@@ -136,6 +136,9 @@ struct HomeView: View {
                         Label("Delete", systemImage: "trash")
                     }
                 }
+                // ⬇️ Optional tweaks for the floating “bubble” look
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
             .onDelete(perform: deleteJob)
         }
