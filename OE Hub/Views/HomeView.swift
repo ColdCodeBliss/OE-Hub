@@ -1,5 +1,3 @@
-// test commit after repository issues
-// test #2 after repo sync issues
 import SwiftUI
 import SwiftData
 
@@ -28,7 +26,7 @@ struct HomeView: View {
     private let heroTopOffset: CGFloat = 0     // distance from button row
     private let gapBelowLogo: CGFloat = 0      // tiny gap above first card
     private let logoYOffset: CGFloat = -69   // negative lifts the logo closer to the buttons
-    private let listGapBelowLogo: CGFloat = -22 // tiny space between logo and first card
+    private let listGapBelowLogo: CGFloat = -25 // tiny space between logo and first card
 
 
     // MARK: - Init: move #Predicate here (reduces compiler load)
