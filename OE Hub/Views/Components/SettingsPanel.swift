@@ -1,3 +1,11 @@
+//
+//  SettingsPanel.swift
+//  OE Hub
+//
+//  Created by Ryan Bliss on 9/10/25.
+//
+
+
 import SwiftUI
 
 struct SettingsPanel: View {
