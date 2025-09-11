@@ -58,9 +58,6 @@ struct DueTabView: View {
                     .foregroundStyle(.blue)
                 }
                 .padding()
-                .sheet(isPresented: $showCompletedDeliverables) {
-                    completedDeliverablesView
-                }
             }
         }
         .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
@@ -111,6 +108,26 @@ struct DueTabView: View {
                     isPresented: $showReminderPicker
                 )
                 .zIndex(3)
+            }
+        }
+
+        // ✅ Completed Deliverables: sheet when Beta OFF
+        .sheet(isPresented: Binding(
+            get: { showCompletedDeliverables && !isBetaGlassEnabled },
+            set: { if !$0 { showCompletedDeliverables = false } }
+        )) {
+            completedDeliverablesView
+        }
+
+        // ✅ Completed Deliverables: floating glass panel when Beta ON
+        .overlay {
+            if showCompletedDeliverables && isBetaGlassEnabled {
+                CompletedDeliverablesPanel(
+                    isPresented: $showCompletedDeliverables,
+                    deliverableToDeletePermanently: $deliverableToDeletePermanently,
+                    deliverables: completedDeliverables
+                )
+                .zIndex(4)
             }
         }
     }
@@ -192,14 +209,13 @@ struct DueTabView: View {
                 let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
                 let hasReminders = !deliverable.reminderOffsets.isEmpty   // or !deliverable.reminderSet.isEmpty
 
-
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(deliverable.taskDescription)
                             .font(.headline)
                             .foregroundStyle(.primary)
 
-                        // ✅ Keep "Due" and the compact chips on ONE ROW
+                        // Keep "Due" and the compact chips on ONE ROW
                         HStack(spacing: 8) {
                             Text("Due")
                                 .font(.subheadline)
@@ -217,9 +233,9 @@ struct DueTabView: View {
                                 ),
                                 displayedComponents: [.date, .hourAndMinute]
                             )
-                            .labelsHidden()                 // hide built-in label
-                            .datePickerStyle(.compact)      // two “chip” controls (date + time)
-                            .fixedSize()                    // prevent vertical wrapping
+                            .labelsHidden()
+                            .datePickerStyle(.compact)
+                            .fixedSize()
                             .accessibilityLabel("Due date")
                         }
                     }
@@ -234,12 +250,12 @@ struct DueTabView: View {
                             .padding(8)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(hasReminders ? Color.black : Color.white) //white bell no reminder, black has reminder
+                    .foregroundStyle(hasReminders ? Color.black : Color.white)
                     .accessibilityLabel("Set reminders")
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(rowBackground(tint: tint, radius: radius)) // ← glass/solid
+                .background(rowBackground(tint: tint, radius: radius)) // glass/solid
                 .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -298,7 +314,7 @@ struct DueTabView: View {
         }
     }
 
-    // MARK: - Completed Sheet
+    // MARK: - Completed Sheet (standard sheet version)
 
     @ViewBuilder
     private var completedDeliverablesView: some View {
@@ -353,7 +369,7 @@ struct DueTabView: View {
     @ViewBuilder
     private func rowBackground(tint: Color, radius: CGFloat) -> some View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
-            // ✅ Real Liquid Glass (iOS 18+): glass bubble with gentle highlight
+            // Real Liquid Glass (iOS 18+): glass bubble with gentle highlight
             ZStack {
                 Color.clear
                     .glassEffect(
@@ -386,6 +402,149 @@ struct DueTabView: View {
                                 endPoint: .bottomTrailing
                             )
                         )
+                        .blendMode(.plusLighter)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(tint)
+        }
+    }
+}
+
+// MARK: - Floating Completed Deliverables Panel (Beta glass)
+private struct CompletedDeliverablesPanel: View {
+    @Binding var isPresented: Bool
+    @Binding var deliverableToDeletePermanently: Deliverable?
+
+    let deliverables: [Deliverable]
+
+    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
+    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
+
+    var body: some View {
+        ZStack {
+            // Dim
+            Color.black.opacity(0.25)
+                .ignoresSafeArea()
+                .onTapGesture { withAnimation { isPresented = false } }
+
+            VStack(spacing: 12) {
+                HStack {
+                    Text("Completed Deliverables")
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        withAnimation { isPresented = false }
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .frame(width: 28, height: 28)
+                    }
+                    .background(closeBackground)
+                    .clipShape(Circle())
+                }
+
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(deliverables) { d in
+                            let tint = color(for: d.colorCode)
+                            let radius: CGFloat = 12
+                            let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
+
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(d.taskDescription)
+                                    .font(.headline)
+                                    .foregroundStyle(.primary)
+
+                                Text("Completed: \(formattedDate(d.completionDate ?? Date()))")
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(rowBackgroundPanel(tint: tint, radius: radius))
+                            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                                    .stroke(isGlass ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
+                            )
+                            .shadow(color: isGlass ? .black.opacity(0.25) : .black.opacity(0.15),
+                                    radius: isGlass ? 14 : 5, x: 0, y: isGlass ? 8 : 0)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    deliverableToDeletePermanently = d
+                                } label: {
+                                    Label("Delete Permanently", systemImage: "trash.fill")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(18)
+            .frame(maxWidth: 560)
+            .background(panelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 10)
+            .padding(.horizontal, 24)
+        }
+        .transition(.opacity.combined(with: .scale))
+    }
+
+    // Panel backgrounds
+    @ViewBuilder
+    private var panelBackground: some View {
+        if #available(iOS 18.0, *), isBetaGlassEnabled {
+            ZStack {
+                Color.clear
+                    .glassEffect(.regular, in: .rect(cornerRadius: 20))
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.16), .clear],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .blendMode(.plusLighter)
+            }
+        } else {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        }
+    }
+
+    @ViewBuilder
+    private var closeBackground: some View {
+        if #available(iOS 18.0, *), isBetaGlassEnabled {
+            Color.clear.glassEffect(.regular, in: .circle)
+        } else {
+            Circle().fill(.ultraThinMaterial)
+        }
+    }
+
+    // Row backgrounds inside the panel
+    @ViewBuilder
+    private func rowBackgroundPanel(tint: Color, radius: CGFloat) -> some View {
+        if #available(iOS 18.0, *), isBetaGlassEnabled {
+            ZStack {
+                Color.clear
+                    .glassEffect(.regular.tint(tint.opacity(0.5)), in: .rect(cornerRadius: radius))
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(LinearGradient(colors: [Color.white.opacity(0.18), .clear],
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .blendMode(.plusLighter)
+            }
+        } else if isLiquidGlassEnabled {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(tint.opacity(0.55))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(LinearGradient(colors: [Color.white.opacity(0.18), .clear],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing))
                         .blendMode(.plusLighter)
                 )
         } else {
