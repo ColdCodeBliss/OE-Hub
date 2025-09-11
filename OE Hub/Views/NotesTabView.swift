@@ -23,7 +23,7 @@ struct NotesTabView: View {
     var job: Job
 
     // Keep your palette but ensure safe indexing everywhere
-    private let colors: [Color] = [.red, .blue, .green, .orange, .yellow, .purple, .pink, .teal]
+    private let colors: [Color] = [.red, .blue, .green, .orange, .yellow, .purple, .brown, .teal]
 
     private var nextColorIndex: Int {
         let usedIndices = Set(job.notes.map { $0.colorIndex })
@@ -253,7 +253,7 @@ struct NotesTabView: View {
         case 3: return "Orange"
         case 4: return "Yellow"
         case 5: return "Purple"
-        case 6: return "Pink"
+        case 6: return "Brown"
         case 7: return "Teal"
         default: return "Green"
         }

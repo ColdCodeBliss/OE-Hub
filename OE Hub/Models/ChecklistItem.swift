@@ -31,7 +31,7 @@ extension ChecklistItem {
         case blue   = "Blue"
         case orange = "Orange"
         case purple = "Purple"
-        case pink   = "Pink"
+        case brown   = "Brown"
         case teal   = "Teal"
         case gray   = "Gray"
     }

@@ -167,7 +167,7 @@ struct NoteEditorPanel: View {
         case 3: return "Orange"
         case 4: return "Yellow"
         case 5: return "Purple"
-        case 6: return "Pink"
+        case 6: return "Brown"
         case 7: return "Teal"
         default: return "Color"
         }
