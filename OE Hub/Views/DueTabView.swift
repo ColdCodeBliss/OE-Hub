@@ -7,6 +7,9 @@ struct DueTabView: View {
     @Binding var newDueDate: Date
     @Binding var isCompletedSectionExpanded: Bool // reserved for future expand/collapse
 
+    // ⬅️ NEW: driven by JobDetailView’s + button
+    @Binding var addDeliverableTrigger: Int
+
     var job: Job
 
     @Environment(\.modelContext) private var modelContext
@@ -30,16 +33,7 @@ struct DueTabView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Button { showAddDeliverableForm = true } label: {
-                Text("Add Deliverable")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.blue.opacity(0.8))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
+            // ⬇️ Removed the old big “Add Deliverable” bubble button
 
             if showAddDeliverableForm {
                 deliverableForm
@@ -67,6 +61,11 @@ struct DueTabView: View {
                 if granted { print("Notification permission granted") }
             }
         }
+        // ⬅️ NEW: open the inline form whenever the parent bumps the trigger
+        .onChange(of: addDeliverableTrigger) { _, _ in
+            showAddDeliverableForm = true
+        }
+
         .alert("Confirm Permanent Deletion", isPresented: Binding(
             get: { deliverableToDeletePermanently != nil },
             set: { if !$0 { deliverableToDeletePermanently = nil } }
@@ -93,7 +92,7 @@ struct DueTabView: View {
             )
             .presentationDetents([.medium])
         }
-        // Split: sheet vs floating panel for reminders (you added earlier)
+        // Split: sheet vs floating panel for reminders
         .sheet(isPresented: Binding(
             get: { showReminderPicker && !isBetaGlassEnabled },
             set: { if !$0 { showReminderPicker = false } }
@@ -250,7 +249,7 @@ struct DueTabView: View {
                             .padding(8)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(hasReminders ? Color.black : Color.white)
+                    .foregroundStyle(hasReminders ? Color.black : Color.white) // white = no reminder, black = has reminder
                     .accessibilityLabel("Set reminders")
                 }
                 .padding()
@@ -474,7 +473,7 @@ private struct CompletedDeliverablesPanel: View {
                                 Button(role: .destructive) {
                                     deliverableToDeletePermanently = d
                                 } label: {
-                                    Label("Delete Permanently", systemImage: "trash.fill")
+                                    Label("Delete Permanently", systemImage: "trash fill")
                                 }
                             }
                         }
@@ -584,7 +583,6 @@ fileprivate func updateNotifications(for deliverable: Deliverable) {
 
 fileprivate func removeAllNotifications(for deliverable: Deliverable) {
     let idPrefix = String(describing: deliverable.persistentModelID)
-    // Remove any pending requests whose identifier starts with this prefix
     UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
         let ids = requests
             .map(\.identifier)

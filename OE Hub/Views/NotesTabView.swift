@@ -15,7 +15,10 @@ struct NotesTabView: View {
 
     // Toggles from Settings
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic
-    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real (iOS 18+)
+    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false   // Real (iOS 18+)
+
+    // ⬅️ NEW: parent-driven trigger for the nav-bar “+” button
+    @Binding var addNoteTrigger: Int
 
     var job: Job
 
@@ -31,42 +34,23 @@ struct NotesTabView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            Button {
-                // Prepare a clean editor state
-                selectedNote = nil
-                newNoteContent = ""
-                newNoteSummary = ""
-                editingColorIndex = nextColorIndex
-                isAddingNote = true
-            } label: {
-                Text("New Note")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.blue.opacity(0.8))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
-
-            ScrollView {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                    // Sort newest first for predictable ordering
-                    ForEach(job.notes.sorted(by: { $0.creationDate > $1.creationDate })) { note in
-                        noteTile(for: note)
-                            .onTapGesture {
-                                selectedNote = note
-                                newNoteContent = note.content
-                                newNoteSummary = note.summary
-                                // Bind picker to existing color
-                                editingColorIndex = safeIndex(note.colorIndex)
-                                isEditingNote = true
-                            }
-                    }
+        // No big button—just the grid
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                // Sort newest first for predictable ordering
+                ForEach(job.notes.sorted(by: { $0.creationDate > $1.creationDate })) { note in
+                    noteTile(for: note)
+                        .onTapGesture {
+                            selectedNote = note
+                            newNoteContent = note.content
+                            newNoteSummary = note.summary
+                            // Bind picker to existing color
+                            editingColorIndex = safeIndex(note.colorIndex)
+                            isEditingNote = true
+                        }
                 }
-                .padding()
             }
+            .padding()
         }
         // OLD editor sheet shown only when Beta is OFF
         .sheet(isPresented: Binding(
@@ -95,6 +79,16 @@ struct NotesTabView: View {
         }
         .navigationTitle("Notes")
         .animation(.default, value: job.notes.count)
+
+        // ⬅️ React to the parent’s nav-bar “+”
+        .onChange(of: addNoteTrigger) { _, _ in
+            // Prepare a clean editor state
+            selectedNote = nil
+            newNoteContent = ""
+            newNoteSummary = ""
+            editingColorIndex = nextColorIndex
+            isAddingNote = true
+        }
     }
 
     // MARK: - Editor (used only for the non-Beta sheet)
@@ -154,7 +148,6 @@ struct NotesTabView: View {
     private func noteTile(for note: Note) -> some View {
         let idx = safeIndex(note.colorIndex)
         let tint = colors[idx]
-        // let fg = readableForeground(on: tint)  //dynamic contrast text color
         let fg: Color = .black   // always black
 
         let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
@@ -176,7 +169,6 @@ struct NotesTabView: View {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .stroke(isGlass ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
         )
-        // Floating “bubble” shadow only in glass modes
         .shadow(color: (isGlass ? Color.black.opacity(0.25) : Color.black.opacity(0.15)),
                 radius: (isGlass ? 14 : 5), x: 0, y: (isGlass ? 8 : 0))
         .accessibilityElement(children: .combine)
@@ -185,7 +177,6 @@ struct NotesTabView: View {
     @ViewBuilder
     private func tileBackground(tint: Color, radius: CGFloat) -> some View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
-            // ✅ Real Liquid Glass (iOS 18+): glass bubble with gentle highlight
             ZStack {
                 Color.clear
                     .glassEffect(
@@ -204,7 +195,6 @@ struct NotesTabView: View {
                     .blendMode(.plusLighter)
             }
         } else if isLiquidGlassEnabled {
-            // 🌈 Classic glassy fallback (SDK-safe): material base + tinted glaze + soft highlight
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(.ultraThinMaterial)
                 .overlay(
@@ -223,7 +213,6 @@ struct NotesTabView: View {
                         .blendMode(.plusLighter)
                 )
         } else {
-            // 🎨 Original solid/tinted look
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(tint.gradient)
         }
@@ -275,15 +264,3 @@ struct NotesTabView: View {
         return ((idx % colors.count) + colors.count) % colors.count
     }
 }
-/*
-#Preview {
-    do {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: Job.self, Deliverable.self, ChecklistItem.self, Note.self, configurations: config)
-        return NotesTabView(job: Job(title: "Preview Job"))
-            .modelContainer(container)
-    } catch {
-        fatalError("Failed to create preview container: \(error)")
-    }
-}
-*/
