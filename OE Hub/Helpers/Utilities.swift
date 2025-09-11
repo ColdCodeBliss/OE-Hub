@@ -49,6 +49,12 @@ func priorityColor<P: RawRepresentable>(for priority: P) -> Color where P.RawVal
     case "red":    return .red
     case "yellow": return .yellow
     case "green":  return .green
+    case "blue":   return .blue
+    case "pink":   return .pink
+    case "purple": return .purple
+    case "teal":   return .teal
+    case "orange": return .orange
+    case "gray":   return .gray
     default:       return .green
     }
 }

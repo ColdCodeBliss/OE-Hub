@@ -8,34 +8,34 @@ struct MindMapTabView: View {
 
     var job: Job
 
-    // Canvas space (virtual large plane)
     private let canvasSize: CGFloat = 3000
-    private var canvasRect: CGRect { CGRect(x: 0, y: 0, width: canvasSize, height: canvasSize) }
     private var canvasCenter: CGPoint { CGPoint(x: canvasSize/2, y: canvasSize/2) }
 
-    // View state
     @State private var scale: CGFloat = 1.0
     @State private var offset: CGSize = .zero
     @State private var selected: MindNode?
 
-    // Track container size for proper centering
     @State private var viewSize: CGSize = .zero
-
-    // Magnification baseline
     @State private var scaleBase: CGFloat = 1.0
 
-    // New node placement
     private let childRadius: CGFloat = 220
-
-    // Small node color palette (uses your Utilities.color(for:))
     private let nodeColorOptions: [String] = ["red","blue","green","yellow","orange","purple","pink","teal","gray"]
 
-    // Clear-all confirmation
     @State private var showClearConfirm = false
+    @State private var isTopToolbarCollapsed = false
+
+    // ✅ Helpers for orientation-aware layout
+    // Orientation-aware helpers
+    private var isLandscape: Bool { viewSize.width > viewSize.height }
+    // How far the whole group slides right when collapsed (you’ve already tuned this)
+    private var slideDistance: CGFloat { isLandscape ? 156 : 94 }
+    // NEW: different right-edge padding based on orientation & collapsed state
+    private var expandedTrailingPad: CGFloat { isLandscape ? -55 : 9 }  // move capsule closer to edge in landscape
+    private var collapsedTrailingPad: CGFloat { isLandscape ? 4 : 4 }  // tiny, so chevron never clips
+
 
     var body: some View {
         GeometryReader { geo in
-            // The map canvas sits in a ZStack; gestures are attached ONLY to the canvas.
             ZStack(alignment: .topLeading) {
                 Color.clear
                     .contentShape(Rectangle())
@@ -43,7 +43,6 @@ struct MindMapTabView: View {
 
                 mapContent
                     .frame(width: canvasSize, height: canvasSize)
-                    // IMPORTANT: offset BEFORE scaling, with topLeading anchor
                     .offset(offset)
                     .scaleEffect(scale, anchor: .topLeading)
                     .gesture(panGesture.simultaneously(with: zoomGesture))
@@ -65,21 +64,63 @@ struct MindMapTabView: View {
         }
         .navigationTitle("Mind Map")
 
-        // ⬇️ Stationary controls: bottom bar
         .safeAreaInset(edge: .bottom) {
             controlsBar
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
         }
 
-        // ⬇️ Floating clear button in the top-right (overlay, does NOT affect layout)
+        // 🔁 Orientation-aware sliding overlay
         .overlay(alignment: .topTrailing) {
-            topRightClearButton
-                .padding(.trailing, 12)
-                .padding(.top, 8)
+            HStack(spacing: 6) {
+                // Handle (always visible)
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                        isTopToolbarCollapsed.toggle()
+                    }
+                } label: {
+                    Image(systemName: isTopToolbarCollapsed ? "chevron.left" : "chevron.right")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 28, height: 28)
+                }
+                .padding(6)
+                .background(topButtonBackground)
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+                .accessibilityLabel(isTopToolbarCollapsed ? "Show tools" : "Hide tools")
+
+                // Capsule with placeholder + trash
+                HStack(spacing: 6) {
+                    Button {
+                        // TODO: placeholder action
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 36, height: 36)
+                    }
+
+                    Button {
+                        showClearConfirm = true
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 36, height: 36)
+                    }
+                    .accessibilityLabel("Clear Mind Map")
+                }
+                .padding(6)
+                .background(topButtonBackground)
+                .clipShape(Capsule())
+                .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+            }
+            // 👉 Slide the entire group; distance depends on orientation
+            .offset(x: isTopToolbarCollapsed ? slideDistance : 0)
+            .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isTopToolbarCollapsed)
+            // 👉 When collapsed, reduce trailing padding so chevron never clips in portrait
+            .padding(.trailing, isTopToolbarCollapsed ? collapsedTrailingPad : expandedTrailingPad)
+            .padding(.top, 8)
         }
 
-        // Destructive confirmation
         .alert("Clear Mind Map?", isPresented: $showClearConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Delete All", role: .destructive) { clearMindMap() }
@@ -88,28 +129,23 @@ struct MindMapTabView: View {
         }
     }
 
-    // MARK: - Map rendering
-
+    // MARK: - Map
     private var mapContent: some View {
         ZStack {
-            // Edges (curved)
             Canvas { ctx, _ in
                 for node in job.mindNodes {
                     guard let parent = node.parent else { continue }
                     let p1 = CGPoint(x: parent.x, y: parent.y)
                     let p2 = CGPoint(x: node.x,   y: node.y)
-
                     var path = Path()
                     let mid = CGPoint(x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2)
                     path.move(to: p1)
                     path.addQuadCurve(to: p2, control: mid)
-
                     let stroke = StrokeStyle(lineWidth: 2, lineCap: .round)
                     ctx.stroke(path, with: .color(.primary.opacity(0.25)), style: stroke)
                 }
             }
 
-            // Nodes
             ForEach(job.mindNodes) { node in
                 NodeBubble(node: node,
                            isSelected: node.id == selected?.id,
@@ -123,8 +159,7 @@ struct MindMapTabView: View {
         .clipped()
     }
 
-    // MARK: - Stationary Controls (Safe-Area Inset)
-
+    // MARK: - Bottom controls (unchanged)
     private var controlsBar: some View {
         HStack(spacing: 10) {
             Button { zoom(by: -0.15) } label: { controlIcon("minus.magnifyingglass") }
@@ -141,7 +176,6 @@ struct MindMapTabView: View {
                     controlIcon(s.isCompleted ? "checkmark.circle.fill" : "circle")
                 }
 
-                // 🎨 Tiny color menu for the selected node
                 Menu {
                     ForEach(nodeColorOptions, id: \.self) { code in
                         Button {
@@ -177,31 +211,6 @@ struct MindMapTabView: View {
     }
 
     @ViewBuilder
-    private func controlIcon(_ systemName: String) -> some View {
-        Image(systemName: systemName)
-            .font(.system(size: 18, weight: .semibold))
-            .frame(width: 36, height: 36)
-            .contentShape(Rectangle())
-    }
-
-    // MARK: - Top-right floating clear button
-
-    private var topRightClearButton: some View {
-        Button {
-            showClearConfirm = true
-        } label: {
-            Image(systemName: "trash")
-                .font(.system(size: 16, weight: .semibold))
-                .frame(width: 36, height: 36)
-        }
-        .padding(6)
-        .background(topButtonBackground)
-        .clipShape(Capsule())
-        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
-        .accessibilityLabel("Clear Mind Map")
-    }
-
-    @ViewBuilder
     private var topButtonBackground: some View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .capsule)
@@ -210,8 +219,15 @@ struct MindMapTabView: View {
         }
     }
 
-    // MARK: - Gestures
+    @ViewBuilder
+    private func controlIcon(_ systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 18, weight: .semibold))
+            .frame(width: 36, height: 36)
+            .contentShape(Rectangle())
+    }
 
+    // MARK: - Gestures
     private var panGesture: some Gesture {
         DragGesture(minimumDistance: 1)
             .onChanged { value in
@@ -223,7 +239,6 @@ struct MindMapTabView: View {
     private var zoomGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                // zoom around top-left anchor (simple & stable)
                 scale = clamp(scaleBase * value, min: 0.4, max: 3.0)
             }
             .onEnded { _ in
@@ -234,7 +249,6 @@ struct MindMapTabView: View {
     private func nodeDragGesture(for node: MindNode) -> some Gesture {
         DragGesture(minimumDistance: 1)
             .onChanged { v in
-                // Convert drag in view space to map space
                 node.x += Double(v.translation.width / scale)
                 node.y += Double(v.translation.height / scale)
             }
@@ -242,7 +256,6 @@ struct MindMapTabView: View {
     }
 
     // MARK: - Actions
-
     private func ensureRoot() {
         if job.mindNodes.contains(where: { $0.isRoot }) { return }
         let root = MindNode(title: job.title.isEmpty ? "Central Idea" : job.title,
@@ -262,28 +275,19 @@ struct MindMapTabView: View {
         }
     }
 
-    /// Center the given map-space point in the visible view, respecting current `scale`.
     private func center(on p: CGPoint) {
         guard viewSize != .zero else { return }
         withAnimation(.spring()) {
-            // Because we apply .offset(...) BEFORE .scaleEffect(..., anchor: .topLeading),
-            // a point at p ends up drawn at (p + offset) * scale.
-            // We want that to equal the view center, so:
-            //   (p + offset) * scale = viewCenter  =>  offset = viewCenter/scale - p
             let viewCenter = CGPoint(x: viewSize.width/2, y: viewSize.height/2)
-            offset = CGSize(
-                width:  viewCenter.x / scale - p.x,
-                height: viewCenter.y / scale - p.y
-            )
+            offset = CGSize(width: viewCenter.x / scale - p.x,
+                            height: viewCenter.y / scale - p.y)
         }
     }
 
     private func addChild() {
-        // Use selected, otherwise attach to root
         guard let anchor = selected ?? job.mindNodes.first(where: { $0.isRoot }) else { return }
         let count = max(0, anchor.children.count)
-        // place around parent, cycling angles
-        let angle = CGFloat(count) * (.pi / 3.0) // 0,60,120...
+        let angle = CGFloat(count) * (.pi / 3.0)
         let dx = cos(angle) * childRadius
         let dy = sin(angle) * childRadius
         let child = MindNode(title: "New Node",
@@ -325,20 +329,12 @@ struct MindMapTabView: View {
     }
 
     private func clearMindMap() {
-        // Delete all nodes (non-reversible)
-        let nodes = job.mindNodes
-        for n in nodes {
-            modelContext.delete(n)
-        }
+        for n in job.mindNodes { modelContext.delete(n) }
         job.mindNodes.removeAll()
         try? modelContext.save()
-
-        // Clear selection and reset transform
         selected = nil
         scale = 1.0
         scaleBase = 1.0
-
-        // Center on the blank canvas
         center(on: canvasCenter)
     }
 
@@ -347,8 +343,7 @@ struct MindMapTabView: View {
     }
 }
 
-// MARK: - Node bubble (compact)
-
+// MARK: - Node bubble (unchanged)
 private struct NodeBubble: View {
     @Environment(\.modelContext) private var modelContext
     var node: MindNode
@@ -357,11 +352,10 @@ private struct NodeBubble: View {
 
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
-    // 🔧 Compact sizing controls
-    private let bubbleWidth: CGFloat = 220           // overall node width
-    private let minBubbleHeight: CGFloat = 52        // minimum height
-    private let radius: CGFloat = 16                 // corner radius
-    private let titleFont: Font = .callout.weight(.semibold) // slightly smaller than headline
+    private let bubbleWidth: CGFloat = 220
+    private let minBubbleHeight: CGFloat = 52
+    private let radius: CGFloat = 16
+    private let titleFont: Font = .callout.weight(.semibold)
     private let hPad: CGFloat = 10
     private let vPad: CGFloat = 8
 
@@ -436,7 +430,6 @@ private struct NodeBubble: View {
         }
     }
 
-    // Two-way binding into a SwiftData model property
     private func binding<T>(_ keyPath: ReferenceWritableKeyPath<MindNode, T>) -> Binding<T> {
         Binding(
             get: { node[keyPath: keyPath] },
