@@ -13,6 +13,8 @@ struct DueTabView: View {
     var job: Job
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.colorScheme) private var colorScheme   // ⬅️ NEW: detect dark mode
+
     @State private var showAddDeliverableForm = false
     @State private var showCompletedDeliverables = false
     @State private var deliverableToDeletePermanently: Deliverable? = nil
@@ -30,6 +32,10 @@ struct DueTabView: View {
             .filter { !$0.isCompleted }
             .sorted { $0.dueDate < $1.dueDate }
     }
+
+    // ⬅️ NEW: shared shadow condition for “white glow”
+    private var useWhiteGlow: Bool { isBetaGlassEnabled && colorScheme == .dark }
+    private var whiteGlowColor: Color { Color.white.opacity(0.20) } // tweak 0.22–0.35 to taste
 
     var body: some View {
         VStack(spacing: 16) {
@@ -206,7 +212,9 @@ struct DueTabView: View {
                 let tint = color(for: deliverable.colorCode)
                 let radius: CGFloat = 12
                 let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
-                let hasReminders = !deliverable.reminderOffsets.isEmpty   // or !deliverable.reminderSet.isEmpty
+
+                // presence of reminders changes bell tint only
+                let hasReminders = !deliverable.reminderOffsets.isEmpty
 
                 HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -260,8 +268,11 @@ struct DueTabView: View {
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .stroke(isGlass ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
                 )
-                .shadow(color: isGlass ? .black.opacity(0.25) : .black.opacity(0.15),
-                        radius: isGlass ? 14 : 5, x: 0, y: isGlass ? 8 : 0)
+                // ⬇️ UPDATED: white glow in dark + Beta, else existing black shadow
+                .shadow(color: useWhiteGlow ? whiteGlowColor
+                                            : (isGlass ? .black.opacity(0.25) : .black.opacity(0.15)),
+                        radius: useWhiteGlow ? 14 : (isGlass ? 14 : 5),
+                        x: 0, y: useWhiteGlow ? 4 : (isGlass ? 8 : 0))
 
                 .swipeActions(edge: .leading, allowsFullSwipe: true) {
                     Button {
@@ -340,8 +351,11 @@ struct DueTabView: View {
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
                             .stroke(isGlass ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
                     )
-                    .shadow(color: isGlass ? .black.opacity(0.25) : .black.opacity(0.15),
-                            radius: isGlass ? 14 : 5, x: 0, y: isGlass ? 8 : 0)
+                    // ⬇️ UPDATED: white glow condition matches active rows
+                    .shadow(color: useWhiteGlow ? whiteGlowColor
+                                                : (isGlass ? .black.opacity(0.25) : .black.opacity(0.15)),
+                            radius: useWhiteGlow ? 16 : (isGlass ? 14 : 5),
+                            x: 0, y: useWhiteGlow ? 6 : (isGlass ? 8 : 0))
                     .swipeActions(edge: .trailing) {
                         Button(role: .destructive) {
                             deliverableToDeletePermanently = deliverable
@@ -419,6 +433,10 @@ private struct CompletedDeliverablesPanel: View {
 
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
     @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
+    @Environment(\.colorScheme) private var colorScheme   // ⬅️ NEW: detect dark mode
+
+    private var useWhiteGlow: Bool { isBetaGlassEnabled && colorScheme == .dark }
+    private var whiteGlowColor: Color { Color.white.opacity(0.28) }
 
     var body: some View {
         ZStack {
@@ -467,13 +485,16 @@ private struct CompletedDeliverablesPanel: View {
                                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                                     .stroke(isGlass ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
                             )
-                            .shadow(color: isGlass ? .black.opacity(0.25) : .black.opacity(0.15),
-                                    radius: isGlass ? 14 : 5, x: 0, y: isGlass ? 8 : 0)
+                            // ⬇️ UPDATED: white glow in dark + Beta, else black shadow
+                            .shadow(color: useWhiteGlow ? whiteGlowColor
+                                                        : (isGlass ? .black.opacity(0.25) : .black.opacity(0.15)),
+                                    radius: useWhiteGlow ? 16 : (isGlass ? 14 : 5),
+                                    x: 0, y: useWhiteGlow ? 6 : (isGlass ? 8 : 0))
                             .contextMenu {
                                 Button(role: .destructive) {
                                     deliverableToDeletePermanently = d
                                 } label: {
-                                    Label("Delete Permanently", systemImage: "trash fill")
+                                    Label("Delete Permanently", systemImage: "trash.fill")
                                 }
                             }
                         }
