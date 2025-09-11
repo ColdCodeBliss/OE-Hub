@@ -28,8 +28,14 @@ extension ChecklistItem {
         case green  = "Green"
         case yellow = "Yellow"
         case red    = "Red"
+        case blue   = "Blue"
+        case orange = "Orange"
+        case purple = "Purple"
+        case pink   = "Pink"
+        case teal   = "Teal"
+        case gray   = "Gray"
     }
-
+    
     var priorityLevel: Priority {
         get { Priority(rawValue: priority) ?? .green }
         set { priority = newValue.rawValue }

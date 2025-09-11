@@ -26,8 +26,8 @@ struct HomeView: View {
     private let heroLogoHeight: CGFloat = 120   // logo size
     private let heroTopOffset: CGFloat = 0      // distance from button row
     private let gapBelowLogo: CGFloat = 0       // tiny gap above first card
-    private let logoYOffset: CGFloat = -69      // negative lifts the logo closer to the buttons
-    private let listGapBelowLogo: CGFloat = -25 // tiny space between logo and first card
+    private let logoYOffset: CGFloat = -84      // negative lifts the logo closer to the buttons
+    private let listGapBelowLogo: CGFloat = -38 // tiny space between logo and first card
 
     // MARK: - Init: move #Predicate here (reduces compiler load)
     init() {
