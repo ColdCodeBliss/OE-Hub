@@ -27,6 +27,9 @@ struct MindMapTabView: View {
     // NEW: auto-arrange confirmation flag
     @State private var showAutoArrangeConfirm = false
 
+    // ✅ Focus for node TextFields (NEW)
+    @FocusState private var focusedNodeID: UUID?
+
     // ✅ Your tuned overlay constants (kept exactly)
     private var isLandscape: Bool { viewSize.width > viewSize.height }
     private var slideDistance: CGFloat { isLandscape ? 156 : 94 }
@@ -38,7 +41,10 @@ struct MindMapTabView: View {
             ZStack(alignment: .topLeading) {
                 Color.clear
                     .contentShape(Rectangle())
-                    .onTapGesture { selected = nil }
+                    .onTapGesture {
+                        selected = nil
+                        focusedNodeID = nil   // ← NEW: dismiss keyboard focus
+                    }
 
                 mapContent
                     .frame(width: canvasSize, height: canvasSize)
@@ -179,13 +185,15 @@ struct MindMapTabView: View {
                 .contentShape(Rectangle())
                 .onTapGesture {
                     selected = nil
+                    focusedNodeID = nil   // ← NEW: dismiss keyboard focus
                 }
 
             // 3) Nodes (these stay on top so they get taps/drag first)
             ForEach(job.mindNodes) { node in
                 NodeBubble(node: node,
                            isSelected: node.id == selected?.id,
-                           glassOn: (isLiquidGlassEnabled || isBetaGlassEnabled))
+                           glassOn: (isLiquidGlassEnabled || isBetaGlassEnabled),
+                           focused: $focusedNodeID)        // ← NEW
                     .position(x: node.x, y: node.y)
                     .highPriorityGesture(nodeDragGesture(for: node))
                     .onTapGesture { selected = node }
@@ -533,12 +541,15 @@ private struct AutoArrangeConfirmPanel: View {
     }
 }
 
-// MARK: - Node bubble (unchanged from your baseline)
+// MARK: - Node bubble (unchanged except focus support)
 private struct NodeBubble: View {
     @Environment(\.modelContext) private var modelContext
     var node: MindNode
     var isSelected: Bool
     var glassOn: Bool
+
+    // NEW: parent-driven focus binding
+    var focused: FocusState<UUID?>.Binding
 
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
@@ -563,6 +574,7 @@ private struct NodeBubble: View {
                     .font(titleFont)
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .focused(focused, equals: node.id)   // ← NEW: tie focus to this node
             }
 
             if !node.children.isEmpty {
