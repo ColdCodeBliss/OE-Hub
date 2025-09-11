@@ -24,15 +24,14 @@ struct MindMapTabView: View {
     @State private var showClearConfirm = false
     @State private var isTopToolbarCollapsed = false
 
-    // ✅ Helpers for orientation-aware layout
-    // Orientation-aware helpers
-    private var isLandscape: Bool { viewSize.width > viewSize.height }
-    // How far the whole group slides right when collapsed (you’ve already tuned this)
-    private var slideDistance: CGFloat { isLandscape ? 156 : 94 }
-    // NEW: different right-edge padding based on orientation & collapsed state
-    private var expandedTrailingPad: CGFloat { isLandscape ? -55 : 9 }  // move capsule closer to edge in landscape
-    private var collapsedTrailingPad: CGFloat { isLandscape ? 4 : 4 }  // tiny, so chevron never clips
+    // NEW: auto-arrange confirmation flag
+    @State private var showAutoArrangeConfirm = false
 
+    // ✅ Your tuned overlay constants (kept exactly)
+    private var isLandscape: Bool { viewSize.width > viewSize.height }
+    private var slideDistance: CGFloat { isLandscape ? 156 : 94 }
+    private var expandedTrailingPad: CGFloat { isLandscape ? -55 : 9 }
+    private var collapsedTrailingPad: CGFloat { isLandscape ? 4 : 4 }
 
     var body: some View {
         GeometryReader { geo in
@@ -70,10 +69,9 @@ struct MindMapTabView: View {
                 .padding(.bottom, 8)
         }
 
-        // 🔁 Orientation-aware sliding overlay
+        // Top-right overlay with slide/chevron
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 6) {
-                // Handle (always visible)
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
                         isTopToolbarCollapsed.toggle()
@@ -89,12 +87,12 @@ struct MindMapTabView: View {
                 .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
                 .accessibilityLabel(isTopToolbarCollapsed ? "Show tools" : "Hide tools")
 
-                // Capsule with placeholder + trash
                 HStack(spacing: 6) {
+                    // ⬇️ Auto-arrange button now asks for confirmation
                     Button {
-                        // TODO: placeholder action
+                        showAutoArrangeConfirm = true
                     } label: {
-                        Image(systemName: "square.and.arrow.up")
+                        Image(systemName: "wand.and.stars")
                             .font(.system(size: 16, weight: .semibold))
                             .frame(width: 36, height: 36)
                     }
@@ -113,14 +111,41 @@ struct MindMapTabView: View {
                 .clipShape(Capsule())
                 .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
             }
-            // 👉 Slide the entire group; distance depends on orientation
             .offset(x: isTopToolbarCollapsed ? slideDistance : 0)
             .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isTopToolbarCollapsed)
-            // 👉 When collapsed, reduce trailing padding so chevron never clips in portrait
             .padding(.trailing, isTopToolbarCollapsed ? collapsedTrailingPad : expandedTrailingPad)
             .padding(.top, 8)
         }
 
+        // 🫧 “Glass bubble” confirmation overlay when a glass style is active
+        .overlay {
+            if showAutoArrangeConfirm && (isBetaGlassEnabled || isLiquidGlassEnabled) {
+                AutoArrangeConfirmPanel(
+                    isPresented: $showAutoArrangeConfirm,
+                    isBeta: isBetaGlassEnabled,
+                    onConfirm: {
+                        autoArrangeTree()
+                    }
+                )
+                .zIndex(3)
+            }
+        }
+
+        // Fallback system alert when no glass style is active
+        .alert(
+            "Re-arrange Mind Map?",
+            isPresented: Binding(
+                get: { showAutoArrangeConfirm && !(isBetaGlassEnabled || isLiquidGlassEnabled) },
+                set: { if !$0 { showAutoArrangeConfirm = false } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) {}
+            Button("Re-arrange", role: .destructive) { autoArrangeTree() }
+        } message: {
+            Text("This will re-arrange the entire map and is not reversible.")
+        }
+
+        // Existing “Clear” alert
         .alert("Clear Mind Map?", isPresented: $showClearConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Delete All", role: .destructive) { clearMindMap() }
@@ -132,20 +157,31 @@ struct MindMapTabView: View {
     // MARK: - Map
     private var mapContent: some View {
         ZStack {
+            // 1) Draw edges/curves between nodes
             Canvas { ctx, _ in
                 for node in job.mindNodes {
                     guard let parent = node.parent else { continue }
                     let p1 = CGPoint(x: parent.x, y: parent.y)
                     let p2 = CGPoint(x: node.x,   y: node.y)
+
                     var path = Path()
                     let mid = CGPoint(x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2)
                     path.move(to: p1)
                     path.addQuadCurve(to: p2, control: mid)
+
                     let stroke = StrokeStyle(lineWidth: 2, lineCap: .round)
                     ctx.stroke(path, with: .color(.primary.opacity(0.25)), style: stroke)
                 }
             }
 
+            // 2) Tap catcher ABOVE edges, BELOW nodes
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    selected = nil
+                }
+
+            // 3) Nodes (these stay on top so they get taps/drag first)
             ForEach(job.mindNodes) { node in
                 NodeBubble(node: node,
                            isSelected: node.id == selected?.id,
@@ -159,7 +195,8 @@ struct MindMapTabView: View {
         .clipped()
     }
 
-    // MARK: - Bottom controls (unchanged)
+
+    // MARK: - Bottom controls
     private var controlsBar: some View {
         HStack(spacing: 10) {
             Button { zoom(by: -0.15) } label: { controlIcon("minus.magnifyingglass") }
@@ -343,7 +380,160 @@ struct MindMapTabView: View {
     }
 }
 
-// MARK: - Node bubble (unchanged)
+// MARK: - Auto-Arrange (hierarchical tidy layout)
+private extension MindMapTabView {
+    func autoArrangeTree() {
+        guard let root = job.mindNodes.first(where: { $0.isRoot }) else { return }
+
+        let leaves = leafCount(root)
+        let levels = max(1, treeDepth(root))
+
+        let baseNodeSpacing: CGFloat = 260
+        let baseLevelGap: CGFloat    = 200
+
+        let maxUsableWidth = canvasSize * 0.85
+        let neededWidth = CGFloat(max(1, leaves - 1)) * baseNodeSpacing
+        let widthScale = neededWidth > maxUsableWidth ? (maxUsableWidth / neededWidth) : 1.0
+        let nodeSpacing = max(160, baseNodeSpacing * widthScale)
+
+        let maxUsableHeight = canvasSize * 0.85
+        let neededHeight = CGFloat(max(0, levels - 1)) * baseLevelGap
+        let heightScale = neededHeight > maxUsableHeight ? (maxUsableHeight / neededHeight) : 1.0
+        let levelGap = max(140, baseLevelGap * heightScale)
+
+        var nextX: CGFloat = 0
+        func assignPositions(_ node: MindNode, level: Int) {
+            if node.children.isEmpty {
+                nextX += nodeSpacing
+                node.x = Double(nextX)
+            } else {
+                for c in node.children {
+                    assignPositions(c, level: level + 1)
+                }
+                if let first = node.children.first, let last = node.children.last {
+                    let fx = CGFloat(first.x)
+                    let lx = CGFloat(last.x)
+                    node.x = Double((fx + lx) / 2.0)
+                } else {
+                    nextX += nodeSpacing
+                    node.x = Double(nextX)
+                }
+            }
+            node.y = Double(CGFloat(level) * levelGap)
+        }
+
+        nextX = 0
+        assignPositions(root, level: 0)
+
+        let xs = job.mindNodes.map { CGFloat($0.x) }
+        let ys = job.mindNodes.map { CGFloat($0.y) }
+        let minX = xs.min() ?? 0, maxX = xs.max() ?? 0
+        let minY = ys.min() ?? 0, maxY = ys.max() ?? 0
+        let width = maxX - minX
+        let height = maxY - minY
+        let centerX = minX + width/2
+        let centerY = minY + height/2
+        let dx = canvasCenter.x - centerX
+        let dy = canvasCenter.y - centerY
+
+        for n in job.mindNodes {
+            n.x = Double(CGFloat(n.x) + dx)
+            n.y = Double(CGFloat(n.y) + dy)
+        }
+
+        try? modelContext.save()
+        selected = root
+        center(on: CGPoint(x: root.x, y: root.y))
+    }
+
+    func leafCount(_ node: MindNode) -> Int {
+        if node.children.isEmpty { return 1 }
+        return node.children.reduce(0) { $0 + leafCount($1) }
+    }
+
+    func treeDepth(_ node: MindNode) -> Int {
+        if node.children.isEmpty { return 1 }
+        return 1 + node.children.map(treeDepth(_:)).max()!
+    }
+}
+
+// MARK: - “Glass” / Material confirmation bubble
+private struct AutoArrangeConfirmPanel: View {
+    @Binding var isPresented: Bool
+    var isBeta: Bool
+    var onConfirm: () -> Void
+
+    var body: some View {
+        ZStack {
+            // Dim behind
+            Color.black.opacity(0.25)
+                .ignoresSafeArea()
+                .onTapGesture { withAnimation { isPresented = false } }
+
+            VStack(spacing: 14) {
+                Text("Re-arrange Mind Map?")
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+
+                Text("This will re-arrange the entire map and is not reversible.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                HStack(spacing: 10) {
+                    Button("Cancel") {
+                        withAnimation { isPresented = false }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    Button("Re-arrange") {
+                        onConfirm()
+                        withAnimation { isPresented = false }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.85))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .padding(20)
+            .background(panelBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: .black.opacity(0.35), radius: 20, y: 10)
+            .padding(.horizontal, 28)
+        }
+        .transition(.opacity.combined(with: .scale))
+        .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isPresented)
+    }
+
+    @ViewBuilder
+    private var panelBackground: some View {
+        if #available(iOS 18.0, *), isBeta {
+            ZStack {
+                Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 20))
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(
+                        LinearGradient(colors: [Color.white.opacity(0.16), .clear],
+                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
+                    .blendMode(.plusLighter)
+            }
+        } else {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+        }
+    }
+}
+
+// MARK: - Node bubble (unchanged from your baseline)
 private struct NodeBubble: View {
     @Environment(\.modelContext) private var modelContext
     var node: MindNode
