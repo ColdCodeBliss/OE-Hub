@@ -379,8 +379,8 @@ struct DueTabView: View {
                     .fill(
                         LinearGradient(
                             colors: [Color.white.opacity(0.18), .clear],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                            startPoint: .topTrailing,
+                            endPoint: .bottomLeading
                         )
                     )
                     .blendMode(.plusLighter)
@@ -397,8 +397,8 @@ struct DueTabView: View {
                         .fill(
                             LinearGradient(
                                 colors: [Color.white.opacity(0.18), .clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                                startPoint: .topTrailing,
+                                endPoint: .bottomLeading
                             )
                         )
                         .blendMode(.plusLighter)

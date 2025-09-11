@@ -518,6 +518,7 @@ private struct AutoArrangeConfirmPanel: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isPresented)
     }
 
+    //Real liquid glass iOS 18+ BETA
     @ViewBuilder
     private var panelBackground: some View {
         if #available(iOS 18.0, *), isBeta {
@@ -526,7 +527,7 @@ private struct AutoArrangeConfirmPanel: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(
                         LinearGradient(colors: [Color.white.opacity(0.16), .clear],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                                       startPoint: .topTrailing, endPoint: .bottomLeading)
                     )
                     .blendMode(.plusLighter)
             }
@@ -609,7 +610,7 @@ private struct NodeBubble: View {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(
                         LinearGradient(colors: [Color.white.opacity(0.18), .clear],
-                                       startPoint: .topLeading, endPoint: .bottomTrailing)
+                                       startPoint: .topTrailing, endPoint: .bottomLeading)
                     )
                     .blendMode(.plusLighter)
             }
@@ -623,7 +624,7 @@ private struct NodeBubble: View {
                 .overlay(
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .fill(LinearGradient(colors: [Color.white.opacity(0.18), .clear],
-                                             startPoint: .topLeading, endPoint: .bottomTrailing))
+                                             startPoint: .topTrailing, endPoint: .bottomLeading))
                         .blendMode(.plusLighter)
                 )
         } else {

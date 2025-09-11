@@ -174,6 +174,7 @@ struct NotesTabView: View {
         .accessibilityElement(children: .combine)
     }
 
+    //Real liquid gladd iOS 18+ BETA
     @ViewBuilder
     private func tileBackground(tint: Color, radius: CGFloat) -> some View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
@@ -188,8 +189,8 @@ struct NotesTabView: View {
                     .fill(
                         LinearGradient(
                             colors: [Color.white.opacity(0.18), .clear],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                            startPoint: .topTrailing,
+                            endPoint: .bottomLeading
                         )
                     )
                     .blendMode(.plusLighter)
@@ -206,8 +207,8 @@ struct NotesTabView: View {
                         .fill(
                             LinearGradient(
                                 colors: [Color.white.opacity(0.18), .clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                                startPoint: .topTrailing,
+                                endPoint: .bottomLeading
                             )
                         )
                         .blendMode(.plusLighter)
