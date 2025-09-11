@@ -19,13 +19,16 @@ struct HomeView: View {
     @State private var selectedJob: Job?
     @State private var showColorPicker = false
     @State private var showSettings = false
+    @State private var navJob: Job? = nil
+
+
 
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
     private let heroLogoHeight: CGFloat = 120   // logo size
     private let heroTopOffset: CGFloat = 0      // distance from button row
-    private let gapBelowLogo: CGFloat = 0       // tiny gap above first card
+    
     private let logoYOffset: CGFloat = -84      // negative lifts the logo closer to the buttons
     private let listGapBelowLogo: CGFloat = -38 // tiny space between logo and first card
 
@@ -53,6 +56,15 @@ struct HomeView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }
+            .navigationDestination(isPresented: Binding(
+                get: { navJob != nil },
+                set: { if !$0 { navJob = nil } }
+            )) {
+                if let job = navJob {
+                    JobDetailView(job: job)
+                }
+            }
+
 
             // Draw the logo on top (doesn't take layout space)
             .overlay(alignment: .top) {
@@ -113,38 +125,39 @@ struct HomeView: View {
     private var jobList: some View {
         List {
             ForEach(jobs, id: \.persistentModelID) { (job: Job) in
-                NavigationLink(destination: JobDetailView(job: job)) {
-                    JobRowView(job: job) // separate file
-                }
-                .buttonStyle(.plain)
-                .swipeActions(edge: .leading, allowsFullSwipe: false) {
-                    Button { startRenaming(job) } label: {
-                        Label("Rename", systemImage: "pencil")
-                    }
-                    .tint(.blue)
+                JobRowView(job: job)
+                    .contentShape(Rectangle())                     // full-row tappable
+                    .onTapGesture { navJob = job }                 // <- trigger nav
 
-                    Button {
-                        selectedJob = job
-                        showColorPicker = true
-                    } label: {
-                        Label("Change Color", systemImage: "paintbrush")
+                    // keep your swipe actions
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        Button { startRenaming(job) } label: {
+                            Label("Rename", systemImage: "pencil")
+                        }
+                        .tint(.blue)
+
+                        Button {
+                            selectedJob = job
+                            showColorPicker = true
+                        } label: {
+                            Label("Change Color", systemImage: "paintbrush")
+                        }
+                        .tint(.green)
                     }
-                    .tint(.green)
-                }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) { softDelete(job) } label: {
-                        Label("Delete", systemImage: "trash")
+                    .swipeActions(edge: .trailing) {
+                        Button(role: .destructive) { softDelete(job) } label: {
+                            Label("Delete", systemImage: "trash")
+                        }
                     }
-                }
-                // ⬇️ Optional tweaks for the floating “bubble” look
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
             .onDelete(perform: deleteJob)
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
     }
+
 
     @ViewBuilder
     private var jobHistoryButton: some View {
