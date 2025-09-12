@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct MindMapTabView: View {
     @Environment(\.modelContext) private var modelContext
@@ -23,18 +24,18 @@ struct MindMapTabView: View {
 
     @State private var showClearConfirm = false
     @State private var isTopToolbarCollapsed = false
-
-    // NEW: auto-arrange confirmation flag
     @State private var showAutoArrangeConfirm = false
 
-    // ✅ Focus for node TextFields (NEW)
     @FocusState private var focusedNodeID: UUID?
 
-    // ✅ Your tuned overlay constants (kept exactly)
     private var isLandscape: Bool { viewSize.width > viewSize.height }
     private var slideDistance: CGFloat { isLandscape ? 156 : 94 }
     private var expandedTrailingPad: CGFloat { isLandscape ? -55 : 9 }
     private var collapsedTrailingPad: CGFloat { isLandscape ? 4 : 4 }
+
+    // ✅ Share state: present sheet only when we have a URL
+    private struct ShareItem: Identifiable { let id = UUID(); let url: URL }
+    @State private var shareItem: ShareItem? = nil
 
     var body: some View {
         GeometryReader { geo in
@@ -43,7 +44,7 @@ struct MindMapTabView: View {
                     .contentShape(Rectangle())
                     .onTapGesture {
                         selected = nil
-                        focusedNodeID = nil   // ← NEW: dismiss keyboard focus
+                        focusedNodeID = nil
                     }
 
                 mapContent
@@ -75,7 +76,7 @@ struct MindMapTabView: View {
                 .padding(.bottom, 8)
         }
 
-        // Top-right overlay with slide/chevron
+        // Top-right overlay (wand, trash, share)
         .overlay(alignment: .topTrailing) {
             HStack(spacing: 6) {
                 Button {
@@ -94,10 +95,7 @@ struct MindMapTabView: View {
                 .accessibilityLabel(isTopToolbarCollapsed ? "Show tools" : "Hide tools")
 
                 HStack(spacing: 6) {
-                    // ⬇️ Auto-arrange button now asks for confirmation
-                    Button {
-                        showAutoArrangeConfirm = true
-                    } label: {
+                    Button { showAutoArrangeConfirm = true } label: {
                         Image(systemName: "wand.and.stars")
                             .font(.system(size: 16, weight: .semibold))
                             .frame(width: 36, height: 36)
@@ -111,6 +109,14 @@ struct MindMapTabView: View {
                             .frame(width: 36, height: 36)
                     }
                     .accessibilityLabel("Clear Mind Map")
+
+                    // ✅ Share (export PDF)
+                    Button { shareMindMap() } label: {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 36, height: 36)
+                    }
+                    .accessibilityLabel("Share Mind Map")
                 }
                 .padding(6)
                 .background(topButtonBackground)
@@ -123,21 +129,19 @@ struct MindMapTabView: View {
             .padding(.top, 8)
         }
 
-        // 🫧 “Glass bubble” confirmation overlay when a glass style is active
+        // Glass confirmation overlay (unchanged)
         .overlay {
             if showAutoArrangeConfirm && (isBetaGlassEnabled || isLiquidGlassEnabled) {
                 AutoArrangeConfirmPanel(
                     isPresented: $showAutoArrangeConfirm,
                     isBeta: isBetaGlassEnabled,
-                    onConfirm: {
-                        autoArrangeTree()
-                    }
+                    onConfirm: { autoArrangeTree() }
                 )
                 .zIndex(3)
             }
         }
 
-        // Fallback system alert when no glass style is active
+        // Fallback system alert (unchanged)
         .alert(
             "Re-arrange Mind Map?",
             isPresented: Binding(
@@ -151,49 +155,52 @@ struct MindMapTabView: View {
             Text("This will re-arrange the entire map and is not reversible.")
         }
 
-        // Existing “Clear” alert
+        // Clear alert (unchanged)
         .alert("Clear Mind Map?", isPresented: $showClearConfirm) {
             Button("Cancel", role: .cancel) {}
             Button("Delete All", role: .destructive) { clearMindMap() }
         } message: {
             Text("This will permanently delete all nodes. This action cannot be undone.")
         }
+
+        // ✅ Present only when we actually have a URL to share
+        .sheet(item: $shareItem, onDismiss: { shareItem = nil }) { item in
+            ActivityView(activityItems: [item.url])
+                .ignoresSafeArea()
+        }
     }
 
-    // MARK: - Map
+    // MARK: - Live map (interactive)
     private var mapContent: some View {
         ZStack {
-            // 1) Draw edges/curves between nodes
+            // edges
             Canvas { ctx, _ in
                 for node in job.mindNodes {
                     guard let parent = node.parent else { continue }
                     let p1 = CGPoint(x: parent.x, y: parent.y)
                     let p2 = CGPoint(x: node.x,   y: node.y)
-
                     var path = Path()
                     let mid = CGPoint(x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2)
                     path.move(to: p1)
                     path.addQuadCurve(to: p2, control: mid)
-
                     let stroke = StrokeStyle(lineWidth: 2, lineCap: .round)
                     ctx.stroke(path, with: .color(.primary.opacity(0.25)), style: stroke)
                 }
             }
 
-            // 2) Tap catcher ABOVE edges, BELOW nodes
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
                     selected = nil
-                    focusedNodeID = nil   // ← NEW: dismiss keyboard focus
+                    focusedNodeID = nil
                 }
 
-            // 3) Nodes (these stay on top so they get taps/drag first)
+            // nodes
             ForEach(job.mindNodes) { node in
                 NodeBubble(node: node,
                            isSelected: node.id == selected?.id,
                            glassOn: (isLiquidGlassEnabled || isBetaGlassEnabled),
-                           focused: $focusedNodeID)        // ← NEW
+                           focused: $focusedNodeID)
                     .position(x: node.x, y: node.y)
                     .highPriorityGesture(nodeDragGesture(for: node))
                     .onTapGesture { selected = node }
@@ -203,8 +210,33 @@ struct MindMapTabView: View {
         .clipped()
     }
 
+    // MARK: - Snapshot map (read-only, used for PDF export)
+    private var snapshotContent: some View {
+        ZStack {
+            Canvas { ctx, _ in
+                for node in job.mindNodes {
+                    guard let parent = node.parent else { continue }
+                    let p1 = CGPoint(x: parent.x, y: parent.y)
+                    let p2 = CGPoint(x: node.x,   y: node.y)
+                    var path = Path()
+                    let mid = CGPoint(x: (p1.x + p2.x)/2, y: (p1.y + p2.y)/2)
+                    path.move(to: p1)
+                    path.addQuadCurve(to: p2, control: mid)
+                    let stroke = StrokeStyle(lineWidth: 2, lineCap: .round)
+                    ctx.stroke(path, with: .color(.primary.opacity(0.25)), style: stroke)
+                }
+            }
 
-    // MARK: - Bottom controls
+            ForEach(job.mindNodes) { node in
+                NodeBubbleSnapshot(node: node, glassOn: (isLiquidGlassEnabled || isBetaGlassEnabled))
+                    .position(x: node.x, y: node.y)
+            }
+        }
+        .frame(width: canvasSize, height: canvasSize)
+        .background(Color.clear)
+    }
+
+    // MARK: - Bottom controls (unchanged)
     private var controlsBar: some View {
         HStack(spacing: 10) {
             Button { zoom(by: -0.15) } label: { controlIcon("minus.magnifyingglass") }
@@ -246,8 +278,7 @@ struct MindMapTabView: View {
         .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
     }
 
-    @ViewBuilder
-    private var controlsBackground: some View {
+    @ViewBuilder private var controlsBackground: some View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .capsule)
         } else {
@@ -255,8 +286,7 @@ struct MindMapTabView: View {
         }
     }
 
-    @ViewBuilder
-    private var topButtonBackground: some View {
+    @ViewBuilder private var topButtonBackground: some View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .capsule)
         } else {
@@ -264,15 +294,14 @@ struct MindMapTabView: View {
         }
     }
 
-    @ViewBuilder
-    private func controlIcon(_ systemName: String) -> some View {
+    @ViewBuilder private func controlIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 18, weight: .semibold))
             .frame(width: 36, height: 36)
             .contentShape(Rectangle())
     }
 
-    // MARK: - Gestures
+    // MARK: - Gestures / actions (unchanged)
     private var panGesture: some Gesture {
         DragGesture(minimumDistance: 1)
             .onChanged { value in
@@ -300,7 +329,6 @@ struct MindMapTabView: View {
             .onEnded { _ in try? modelContext.save() }
     }
 
-    // MARK: - Actions
     private func ensureRoot() {
         if job.mindNodes.contains(where: { $0.isRoot }) { return }
         let root = MindNode(title: job.title.isEmpty ? "Central Idea" : job.title,
@@ -386,9 +414,88 @@ struct MindMapTabView: View {
     private func clamp(_ v: CGFloat, min lo: CGFloat, max hi: CGFloat) -> CGFloat {
         Swift.max(lo, Swift.min(hi, v))
     }
+
+    // MARK: - Export & Share
+
+    private func shareMindMap() {
+        if let url = exportMindMapPDF(maxDimension: 2200) {
+            // Present only once the URL is ready
+            shareItem = ShareItem(url: url)
+        } else {
+            print("⚠️ Mind map export failed; no file to share.")
+        }
+    }
+
+    /// Renders a **read-only** snapshot (no TextFields) to PDF and writes to a temp file.
+    private func exportMindMapPDF(maxDimension: CGFloat = 2200) -> URL? {
+        let exportSide = min(canvasSize, maxDimension)
+        let scaleFactor = exportSide / canvasSize
+        let fullSize = CGSize(width: canvasSize, height: canvasSize)
+
+        // Try ImageRenderer first
+        let exportView = snapshotContent
+            .frame(width: fullSize.width, height: fullSize.height)
+            .background(Color.clear)
+
+        let swiftUIRenderer = ImageRenderer(content: exportView)
+        swiftUIRenderer.scale = Double(scaleFactor)
+
+        var snapshot: UIImage? = swiftUIRenderer.uiImage
+
+        // Fallback: render via a HostingController if ImageRenderer fails (e.g. platform text issues)
+        if snapshot == nil {
+            let host = UIHostingController(rootView: exportView)
+            host.view.bounds = CGRect(origin: .zero, size: fullSize)
+            host.view.backgroundColor = .clear
+            // Ensure layout before rendering the layer
+            host.view.setNeedsLayout()
+            host.view.layoutIfNeeded()
+
+            let renderer = UIGraphicsImageRenderer(size: fullSize)
+            snapshot = renderer.image { ctx in
+                host.view.layer.render(in: ctx.cgContext)
+            }
+
+            // Downscale to requested size if needed
+            if scaleFactor != 1.0, let img = snapshot {
+                let scaledSize = CGSize(width: fullSize.width * scaleFactor, height: fullSize.height * scaleFactor)
+                let scaledRenderer = UIGraphicsImageRenderer(size: scaledSize)
+                snapshot = scaledRenderer.image { _ in
+                    img.draw(in: CGRect(origin: .zero, size: scaledSize))
+                }
+            }
+        }
+
+        guard let image = snapshot else { return nil }
+
+        // Make one-page PDF from the snapshot image
+        let pageRect = CGRect(origin: .zero, size: image.size)
+        let pdfRenderer = UIGraphicsPDFRenderer(bounds: pageRect, format: UIGraphicsPDFRendererFormat())
+        let pdfData = pdfRenderer.pdfData { ctx in
+            ctx.beginPage()
+            image.draw(in: pageRect)
+        }
+
+        let base = job.title.isEmpty ? "MindMap" : job.title
+        let safe = base.replacingOccurrences(of: "/", with: "-")
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(safe)_MindMap.pdf")
+
+        do {
+            try pdfData.write(to: url, options: .atomic)
+            return url
+        } catch {
+            print("PDF write error: \(error)")
+            return nil
+        }
+    }
 }
 
-// MARK: - Auto-Arrange (hierarchical tidy layout)
+// === AutoArrangeConfirmPanel, NodeBubble, NodeBubbleSnapshot, ActivityView remain unchanged ===
+// (Keep your existing implementations below)
+
+
+// MARK: - Auto-Arrange (unchanged)
 private extension MindMapTabView {
     func autoArrangeTree() {
         guard let root = job.mindNodes.first(where: { $0.isRoot }) else { return }
@@ -415,9 +522,7 @@ private extension MindMapTabView {
                 nextX += nodeSpacing
                 node.x = Double(nextX)
             } else {
-                for c in node.children {
-                    assignPositions(c, level: level + 1)
-                }
+                for c in node.children { assignPositions(c, level: level + 1) }
                 if let first = node.children.first, let last = node.children.last {
                     let fx = CGFloat(first.x)
                     let lx = CGFloat(last.x)
@@ -465,7 +570,7 @@ private extension MindMapTabView {
     }
 }
 
-// MARK: - “Glass” / Material confirmation bubble
+// MARK: - Glass confirmation bubble (unchanged)
 private struct AutoArrangeConfirmPanel: View {
     @Binding var isPresented: Bool
     var isBeta: Bool
@@ -473,7 +578,6 @@ private struct AutoArrangeConfirmPanel: View {
 
     var body: some View {
         ZStack {
-            // Dim behind
             Color.black.opacity(0.25)
                 .ignoresSafeArea()
                 .onTapGesture { withAnimation { isPresented = false } }
@@ -518,7 +622,6 @@ private struct AutoArrangeConfirmPanel: View {
         .animation(.spring(response: 0.35, dampingFraction: 0.9), value: isPresented)
     }
 
-    //Real liquid glass iOS 18+ BETA
     @ViewBuilder
     private var panelBackground: some View {
         if #available(iOS 18.0, *), isBeta {
@@ -542,14 +645,12 @@ private struct AutoArrangeConfirmPanel: View {
     }
 }
 
-// MARK: - Node bubble (unchanged except focus support)
+// MARK: - Live node bubble (editable)
 private struct NodeBubble: View {
     @Environment(\.modelContext) private var modelContext
     var node: MindNode
     var isSelected: Bool
     var glassOn: Bool
-
-    // NEW: parent-driven focus binding
     var focused: FocusState<UUID?>.Binding
 
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
@@ -575,7 +676,7 @@ private struct NodeBubble: View {
                     .font(titleFont)
                     .foregroundStyle(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .focused(focused, equals: node.id)   // ← NEW: tie focus to this node
+                    .focused(focused, equals: node.id)
             }
 
             if !node.children.isEmpty {
@@ -639,4 +740,96 @@ private struct NodeBubble: View {
             set: { node[keyPath: keyPath] = $0; try? modelContext.save() }
         )
     }
+}
+
+// MARK: - Snapshot node bubble (read-only label)
+private struct NodeBubbleSnapshot: View {
+    var node: MindNode
+    var glassOn: Bool
+
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
+
+    private let bubbleWidth: CGFloat = 220
+    private let minBubbleHeight: CGFloat = 52
+    private let radius: CGFloat = 16
+    private let titleFont: Font = .callout.weight(.semibold)
+    private let hPad: CGFloat = 10
+    private let vPad: CGFloat = 8
+
+    var body: some View {
+        let tint = color(for: node.colorCode ?? "teal")
+
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Image(systemName: node.isCompleted ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(node.isCompleted ? .green : .secondary)
+
+                Text(node.title.isEmpty ? "Idea" : node.title)
+                    .font(titleFont)
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if !node.children.isEmpty {
+                Text("\(node.children.count) node\(node.children.count == 1 ? "" : "s")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, hPad)
+        .padding(.vertical, vPad)
+        .frame(width: bubbleWidth, alignment: .leading)
+        .frame(minHeight: minBubbleHeight, alignment: .leading)
+        .background(nodeBackground(tint: tint))
+        .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .stroke(glassOn ? Color.white.opacity(0.10) : Color.white.opacity(0.20), lineWidth: 1)
+        )
+        .shadow(color: glassOn ? .black.opacity(0.25) : .black.opacity(0.15),
+                radius: glassOn ? 12 : 5, x: 0, y: glassOn ? 7 : 0)
+    }
+
+    @ViewBuilder
+    private func nodeBackground(tint: Color) -> some View {
+        if #available(iOS 18.0, *), isBetaGlassEnabled {
+            ZStack {
+                Color.clear
+                    .glassEffect(.regular.tint(tint.opacity(0.5)),
+                                 in: .rect(cornerRadius: radius))
+                RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(
+                        LinearGradient(colors: [Color.white.opacity(0.18), .clear],
+                                       startPoint: .topTrailing, endPoint: .bottomLeading)
+                    )
+                    .blendMode(.plusLighter)
+            }
+        } else if glassOn {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(tint.opacity(0.55))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(LinearGradient(colors: [Color.white.opacity(0.18), .clear],
+                                             startPoint: .topTrailing, endPoint: .bottomLeading))
+                        .blendMode(.plusLighter)
+                )
+        } else {
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(tint.gradient)
+        }
+    }
+}
+
+// MARK: - Share sheet wrapper
+private struct ActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]? = nil
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+    }
+    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
