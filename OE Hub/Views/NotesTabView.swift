@@ -17,6 +17,7 @@ struct NotesTabView: View {
 
     // Color picker state
     @State private var editingColorIndex: Int = 0
+    
 
     // Style toggles
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
@@ -77,20 +78,27 @@ struct NotesTabView: View {
     }
 
     // Non-Beta rich-text sheet editor
+    @ViewBuilder
     private var nonBetaSheet: some View {
         NavigationStack {
             VStack(spacing: 16) {
+                // Summary
                 TextField("Summary (short description)", text: $newNoteSummary)
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
 
-                RichTextEditor(text: $editingAttributed, selectedRange: $selectionRange)
-                    .frame(minHeight: 220)
-                    .padding(8)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
+                // Rich text editor (UIKit-backed)
+                RichTextEditorKit(
+                    attributedText: $editingAttributed,      // ← label fixed
+                    selectedRange: $selectionRange           // make sure this @State exists
+                )
+                .frame(minHeight: 220)
+                .padding(8)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
 
+                // Color
                 Picker("Color", selection: $editingColorIndex) {
                     ForEach(0..<colors.count, id: \.self) { (index: Int) in
                         Text(colorName(for: index)).tag(index)
@@ -99,7 +107,8 @@ struct NotesTabView: View {
                 .pickerStyle(.menu)
                 .padding(.horizontal)
 
-                HStack {
+                // Actions: Cancel | Save | (Trash when editing)
+                HStack(spacing: 12) {
                     Button("Cancel") { dismissEditor() }
                         .foregroundStyle(.red)
 
@@ -108,13 +117,28 @@ struct NotesTabView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding()
-                    .background(.green.opacity(0.8))
+                    .background(.green.opacity(0.85))
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .disabled(
                         newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                         editingAttributed.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
+
+                    // 🔥 Delete only when editing an existing note
+                    if selectedNote != nil {
+                        Button {
+                            deleteCurrentNote()               // ensure this helper exists in the view
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 48, height: 44)
+                        }
+                        .background(Color.red.opacity(0.90))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .accessibilityLabel("Delete Note")
+                    }
                 }
                 .padding(.horizontal)
             }
@@ -130,6 +154,7 @@ struct NotesTabView: View {
             }
         }
     }
+
 
     // ✅ Beta glass floating panel editor — fixed to use attributed text
     @ViewBuilder
@@ -233,7 +258,7 @@ struct NotesTabView: View {
         }
     }
 
-    // MARK: - Actions
+    // MARK: - Actions & Helpers
 
     private func openEditor(for note: Note) {
         selectedNote = note
@@ -280,6 +305,23 @@ struct NotesTabView: View {
         try? modelContext.save()
         dismissEditor()
     }
+    
+    // Helper - Permanently delete the note currently being edited
+    private func deleteCurrentNote() {
+        guard let note = selectedNote else { return }
+
+        if let idx = job.notes.firstIndex(of: note) {
+            let removed = job.notes.remove(at: idx)   // unlink from the job
+            modelContext.delete(removed)              // permanently delete
+        } else {
+            // Fallback: if it wasn't in the array (edge case), still try to delete it
+            modelContext.delete(note)
+        }
+
+        try? modelContext.save()
+        dismissEditor()                               // resets editor state & selectedNote
+    }
+
 
     private func dismissEditor() {
         isAddingNote = false
