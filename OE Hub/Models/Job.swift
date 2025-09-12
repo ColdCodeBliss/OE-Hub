@@ -44,7 +44,7 @@ final class Job {
 // MARK: - Type-safe wrappers & helpers (no schema change)
 extension Job {
     enum ColorCode: String, CaseIterable {
-        case gray, red, blue, green, purple, orange, yellow, teal, pink
+        case gray, red, blue, green, purple, orange, yellow, teal, brown
     }
 
     enum JobType: String, CaseIterable {

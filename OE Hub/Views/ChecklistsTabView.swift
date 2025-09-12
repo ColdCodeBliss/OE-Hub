@@ -3,6 +3,7 @@ import SwiftData
 
 struct ChecklistsTabView: View {
     @Binding var newChecklistItem: String
+    @Binding var addChecklistTrigger: Int          // ⬅️ NEW: nav-bar “+” trigger from parent
     var job: Job
 
     @Environment(\.modelContext) private var modelContext
@@ -13,25 +14,12 @@ struct ChecklistsTabView: View {
     @State private var showClearConfirmation = false
 
     // Precompute filtered arrays to keep indices stable & avoid repeated work
-    private var activeItems: [ChecklistItem] {
-        job.checklistItems.filter { !$0.isCompleted }
-    }
-    private var completedItems: [ChecklistItem] {
-        job.checklistItems.filter { $0.isCompleted }
-    }
+    private var activeItems: [ChecklistItem]   { job.checklistItems.filter { !$0.isCompleted } }
+    private var completedItems: [ChecklistItem]{ job.checklistItems.filter {  $0.isCompleted } }
 
     var body: some View {
         VStack(spacing: 16) {
-            Button { showAddChecklistForm = true } label: {
-                Text("Add Checklist Item")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.blue.opacity(0.8))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-            }
-            .padding(.horizontal)
+            // ⬇️ Removed the big "Add Checklist Item" bubble button
 
             if showAddChecklistForm {
                 checklistForm
@@ -57,6 +45,11 @@ struct ChecklistsTabView: View {
         } message: {
             Text("Are you sure you want to permanently delete all completed checklists? This action cannot be undone.")
         }
+        // Open the inline add form whenever the parent increments the trigger
+        .onChange(of: addChecklistTrigger) { _, _ in
+            newChecklistItem = ""
+            withAnimation { showAddChecklistForm = true }
+        }
     }
 
     // MARK: - Add Form
@@ -75,7 +68,7 @@ struct ChecklistsTabView: View {
 
             HStack {
                 Button {
-                    showAddChecklistForm = false
+                    withAnimation { showAddChecklistForm = false }
                 } label: {
                     Text("Cancel")
                         .frame(maxWidth: .infinity)
@@ -113,7 +106,7 @@ struct ChecklistsTabView: View {
                 ForEach(activeItems) { item in
                     HStack {
                         Circle()
-                            .fill(priorityColor(for: item.priorityLevel)) // uses Utilities helper + typed wrapper
+                            .fill(priorityColor(for: item.priorityLevel))
                             .frame(width: 12, height: 12)
 
                         Text(item.title)
@@ -163,9 +156,7 @@ struct ChecklistsTabView: View {
                             .foregroundStyle(.gray)
                     }
                     .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation { isCompletedSectionExpanded.toggle() }
-                    }
+                    .onTapGesture { withAnimation { isCompletedSectionExpanded.toggle() } }
             ) {
                 if isCompletedSectionExpanded {
                     ForEach(completedItems) { item in
@@ -177,7 +168,8 @@ struct ChecklistsTabView: View {
                             Text(item.title)
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text(item.completionDate ?? Date(), format: .dateTime.month(.twoDigits).day(.twoDigits).year(.defaultDigits))
+                            Text(item.completionDate ?? Date(),
+                                 format: .dateTime.month(.twoDigits).day(.twoDigits).year(.defaultDigits))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -241,13 +233,3 @@ struct ChecklistsTabView: View {
         try? modelContext.save()
     }
 }
-/*
-#Preview {
-    ChecklistsTabView(
-        newChecklistItem: .constant(""),
-        job: Job(title: "Preview Job")
-    )
-    .modelContainer(for: [Job.self, ChecklistItem.self], inMemory: true)
-}
-*/
-

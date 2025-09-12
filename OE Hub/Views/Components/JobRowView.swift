@@ -7,6 +7,7 @@ struct JobRowView: View {
     // Classic (fallback) and Beta (real Liquid Glass) toggles
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
+    @Environment(\.colorScheme) private var colorScheme
 
     private let radius: CGFloat = 20
 
@@ -32,8 +33,8 @@ struct JobRowView: View {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .stroke(borderColor, lineWidth: 1)
         )
-        // “Floating bubble” shadow
-        .shadow(color: shadowColor, radius: shadowRadius, y: shadowY)
+        // “Floating bubble” shadow (white glow in dark mode + Beta glass)
+        .shadow(color: currentShadowColor, radius: shadowRadius, y: shadowY)
         .padding(.vertical, 2)
     }
 
@@ -46,16 +47,16 @@ struct JobRowView: View {
             ZStack {
                 Color.clear
                     .glassEffect(
-                        .regular.tint(tint.opacity(0.75)),
+                        .regular.tint(tint.opacity(0.65)),
                         in: .rect(cornerRadius: radius)
                     )
                 // soft highlight for depth (keeps “bubble” vibe)
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: [Color.white.opacity(0.15), .clear],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                            colors: [Color.white.opacity(0.20), .clear],
+                            startPoint: .topTrailing,
+                            endPoint: .bottomLeading
                         )
                     )
                     .blendMode(.plusLighter)
@@ -73,8 +74,8 @@ struct JobRowView: View {
                         .fill(
                             LinearGradient(
                                 colors: [Color.white.opacity(0.15), .clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                                startPoint: .topTrailing,
+                                endPoint: .bottomLeading
                             )
                         )
                         .blendMode(.plusLighter)
@@ -92,10 +93,14 @@ struct JobRowView: View {
         : .black.opacity(0.06)
     }
 
-    private var shadowColor: Color {
-        (isBetaGlassEnabled || isLiquidGlassEnabled)
-        ? .black.opacity(0.25)
-        : .black.opacity(0.15)
+    // New: dynamic shadow color (white glow in dark mode + Beta glass)
+    private var currentShadowColor: Color {
+        if isBetaGlassEnabled && colorScheme == .dark {
+            return Color.white.opacity(0.21)   // tweak 0.22–0.35 to taste
+        }
+        return (isBetaGlassEnabled || isLiquidGlassEnabled)
+            ? Color.black.opacity(0.25)
+            : Color.black.opacity(0.15)
     }
 
     private var shadowRadius: CGFloat { (isBetaGlassEnabled || isLiquidGlassEnabled) ? 14 : 5 }

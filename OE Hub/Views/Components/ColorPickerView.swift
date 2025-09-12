@@ -13,7 +13,7 @@ struct ColorPickerView: View {
     @Binding var isPresented: Bool
 
     // Keep your available palette; reuses Utilities.color(for:)
-    let colors: [String] = ["red", "blue", "green", "yellow", "orange", "purple", "pink", "teal", "gray"]
+    let colors: [String] = ["red", "blue", "green", "yellow", "orange", "purple", "brown", "teal", "gray"]
 
     @Environment(\.modelContext) private var modelContext
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
