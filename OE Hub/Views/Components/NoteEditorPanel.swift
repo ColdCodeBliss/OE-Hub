@@ -7,7 +7,7 @@ struct NoteEditorPanel: View {
     let title: String
     @Binding var summary: String
 
-    // ⬅️ Now edits the caller’s attributed text directly
+    // Edits the caller’s attributed text directly
     @Binding var attributedText: NSAttributedString
     @State private var selectedRange: NSRange = NSRange(location: 0, length: 0)
 
@@ -270,7 +270,7 @@ struct NoteEditorPanel: View {
     }
 }
 
-// MARK: - Dummy editor wrapper (must match the one you added project-wide)
+// MARK: - UITextView-backed rich editor
 struct RichTextEditorKit: UIViewRepresentable {
     @Binding var attributedText: NSAttributedString
     @Binding var selectedRange: NSRange
@@ -285,6 +285,10 @@ struct RichTextEditorKit: UIViewRepresentable {
         tv.textContainerInset = UIEdgeInsets(top: 8, left: 6, bottom: 8, right: 6)
         tv.font = UIFont.preferredFont(forTextStyle: .body)
         tv.adjustsFontForContentSizeCategory = true
+
+        // allow inline styling operations to apply
+        tv.allowsEditingTextAttributes = true
+
         tv.attributedText = attributedText
         tv.selectedRange = selectedRange
         return tv
@@ -306,11 +310,24 @@ struct RichTextEditorKit: UIViewRepresentable {
         init(_ parent: RichTextEditorKit) { self.parent = parent }
 
         func textViewDidChange(_ textView: UITextView) {
-            parent.attributedText = textView.attributedText
+            let newValue: NSAttributedString = textView.attributedText ?? NSAttributedString(string: "")
+            // Avoid synchronous state mutation during view update
+            if parent.attributedText != newValue {
+                DispatchQueue.main.async {
+                    self.parent.attributedText = newValue
+                }
+            }
         }
 
         func textViewDidChangeSelection(_ textView: UITextView) {
-            parent.selectedRange = textView.selectedRange
+            let newRange = textView.selectedRange
+            if self.parent.selectedRange.location != newRange.location ||
+               self.parent.selectedRange.length   != newRange.length {
+                // Defer to next runloop to avoid “Modifying state during view update”
+                DispatchQueue.main.async {
+                    self.parent.selectedRange = newRange
+                }
+            }
         }
     }
 }
