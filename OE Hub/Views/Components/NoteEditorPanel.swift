@@ -17,6 +17,9 @@ struct NoteEditorPanel: View {
     var onCancel: () -> Void
     var onSave: () -> Void
 
+    // ⬅️ NEW: provide this only when editing to show the trash button
+    var onDelete: (() -> Void)? = nil
+
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
     var body: some View {
@@ -81,7 +84,7 @@ struct NoteEditorPanel: View {
                         .foregroundStyle(.red)
 
                     Button("Save") {
-                        onSave()   // caller persists attributedText to Note
+                        onSave()
                         dismiss()
                     }
                     .frame(maxWidth: .infinity)
@@ -90,6 +93,22 @@ struct NoteEditorPanel: View {
                     .foregroundStyle(.white)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .disabled(!saveEnabled)
+
+                    // ⬅️ NEW: Trashcan appears only when onDelete is present (i.e., editing)
+                    if onDelete != nil {
+                        Button(role: .destructive) {
+                            onDelete?()
+                            dismiss()
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 40, height: 40)
+                        }
+                        .accessibilityLabel("Delete Note")
+                        .background(Color.red.opacity(0.9))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                    }
                 }
                 .padding(16)
             }
@@ -311,7 +330,6 @@ struct RichTextEditorKit: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             let newValue: NSAttributedString = textView.attributedText ?? NSAttributedString(string: "")
-            // Avoid synchronous state mutation during view update
             if parent.attributedText != newValue {
                 DispatchQueue.main.async {
                     self.parent.attributedText = newValue
@@ -323,7 +341,6 @@ struct RichTextEditorKit: UIViewRepresentable {
             let newRange = textView.selectedRange
             if self.parent.selectedRange.location != newRange.location ||
                self.parent.selectedRange.length   != newRange.length {
-                // Defer to next runloop to avoid “Modifying state during view update”
                 DispatchQueue.main.async {
                     self.parent.selectedRange = newRange
                 }

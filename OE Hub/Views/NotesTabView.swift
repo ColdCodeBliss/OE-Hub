@@ -142,19 +142,30 @@ struct NotesTabView: View {
                 ),
                 title: (selectedNote != nil ? "Edit Note" : "New Note"),
                 summary: $newNoteSummary,
-                attributedText: $editingAttributed,     // ← FIXED: pass rich text binding
+                attributedText: $editingAttributed,     // rich text binding
                 colors: colors,
                 colorIndex: $editingColorIndex,
                 onCancel: { dismissEditor() },
                 onSave: {
-                    saveNote(attributed: editingAttributed)       // ← FIXED: persist rich text
-                }
+                    saveNote(attributed: editingAttributed)          // persist rich text
+                },
+                onDelete: (selectedNote == nil ? nil : {
+                    // Delete only available when editing an existing note
+                    guard let note = selectedNote else { return }
+                    if let idx = job.notes.firstIndex(of: note) {
+                        job.notes.remove(at: idx)
+                    }
+                    modelContext.delete(note)
+                    try? modelContext.save()
+                    dismissEditor()
+                })
             )
             .zIndex(2)
         } else {
             EmptyView()
         }
     }
+
 
     // MARK: - Tiles
 
