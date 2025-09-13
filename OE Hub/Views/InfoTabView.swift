@@ -27,9 +27,6 @@ struct InfoTabView: View {
 
     @State private var showEditForm = false
 
-    // ⬅️ NEW: GitHub browser sheet flag
-    @State private var showGitHubBrowser = false
-
     private let cardRadius: CGFloat = 18
 
     var body: some View {
@@ -64,11 +61,11 @@ struct InfoTabView: View {
                         loadJobInfo()
                         showEditForm = true
                     }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.blue.opacity(0.8))
-                        .foregroundStyle(.white)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.blue.opacity(0.8))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -88,22 +85,7 @@ struct InfoTabView: View {
         }
         .onAppear { loadJobInfo() }
 
-        // ⬅️ NEW: Toolbar with GitHub button (top-right)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showGitHubBrowser = true
-                } label: {
-                    // Swap to GitHubIcon() if you added the optional view,
-                    // or use an asset named "github" if present.
-                    Image(systemName: "chevron.left.slash.chevron.right")
-                        .font(.system(size: 18, weight: .semibold))
-                }
-                .accessibilityLabel("Open GitHub Browser")
-            }
-        }
-
-        // Sheet when Beta OFF (your original editor)
+        // Sheet when Beta OFF (original editor)
         .sheet(isPresented: Binding(
             get: { showEditForm && !isBetaGlassEnabled },
             set: { if !$0 { showEditForm = false } }
@@ -192,11 +174,6 @@ struct InfoTabView: View {
                 )
                 .zIndex(3)
             }
-        }
-
-        // ⬅️ NEW: Present the GitHub browser
-        .sheet(isPresented: $showGitHubBrowser) {
-            GitHubBrowserView()
         }
     }
 

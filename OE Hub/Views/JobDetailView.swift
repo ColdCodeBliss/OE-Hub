@@ -16,7 +16,7 @@ struct JobDetailView: View {
     @State private var addNoteTrigger: Int = 0
     @State private var addChecklistTrigger: Int = 0
 
-    // NEW: GitHub browser sheet flag
+    // GitHub browser sheet flag
     @State private var showGitHubBrowser: Bool = false
 
     var job: Job
@@ -28,7 +28,6 @@ struct JobDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { trailingButton }
             }
-            // Present the GitHub repo browser
             .sheet(isPresented: $showGitHubBrowser) {
                 GitHubBrowserView()
             }
@@ -100,18 +99,26 @@ struct JobDetailView: View {
         case .due:
             Button("Add Deliverable", systemImage: "plus") { addDeliverableTrigger &+= 1 }
                 .accessibilityLabel("Add Deliverable")
+
         case .notes:
             Button("Add Note", systemImage: "plus") { addNoteTrigger &+= 1 }
                 .accessibilityLabel("Add Note")
+
         case .checklist:
             Button("Add Item", systemImage: "plus") { addChecklistTrigger &+= 1 }
                 .accessibilityLabel("Add Checklist Item")
+
         case .info:
-            // NEW: GitHub button (uses a safe SF Symbol; swap to an asset if you add one)
-            Button("GitHub", systemImage: "link") {
-                showGitHubBrowser = true
+            // Use asset image "github" from Assets.xcassets
+            Button(action: { showGitHubBrowser = true }) {
+                Image("github")
+                    .renderingMode(.original)        // keep original colors
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)    // toolbar-friendly size
+                    .accessibilityLabel("Open GitHub Browser")
             }
-            .accessibilityLabel("Open GitHub Browser")
+
         default:
             EmptyView()
         }
