@@ -4,129 +4,141 @@ import SwiftData
 struct NotesTabView: View {
     @Environment(\.modelContext) private var modelContext
 
+    // Editor state
     @State private var isAddingNote = false
     @State private var isEditingNote = false
     @State private var newNoteContent = ""
     @State private var newNoteSummary = ""
     @State private var selectedNote: Note? = nil
 
-    // Drive the picker even when creating a note (selectedNote == nil)
+    // Rich text buffer (non-Beta sheet + Beta panel)
+    @State private var editingAttributed: NSAttributedString = NSAttributedString(string: "")
+    @State private var selectionRange: NSRange = NSRange(location: 0, length: 0)
+
+    // Color picker state
     @State private var editingColorIndex: Int = 0
+    
 
-    // Toggles from Settings
-    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic
-    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false   // Real (iOS 18+)
+    // Style toggles
+    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
+    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
 
-    // ⬅️ NEW: parent-driven trigger for the nav-bar “+” button
+    // Parent-driven trigger for the nav-bar “+”
     @Binding var addNoteTrigger: Int
 
     var job: Job
 
-    // Keep your palette but ensure safe indexing everywhere
+    // MARK: - Precomputed constants
     private let colors: [Color] = [.red, .blue, .green, .orange, .yellow, .purple, .brown, .teal]
+    private let gridColumns: [GridItem] = [GridItem(.flexible()), GridItem(.flexible())]
+
+    private var sortedNotes: [Note] {
+        let notes: [Note] = job.notes
+        return notes.sorted { (a: Note, b: Note) in a.creationDate > b.creationDate }
+    }
 
     private var nextColorIndex: Int {
-        let usedIndices = Set(job.notes.map { $0.colorIndex })
-        for index in 0..<colors.count {
-            if !usedIndices.contains(index) { return index }
-        }
+        let used: Set<Int> = Set(job.notes.map { $0.colorIndex })
+        for i in 0..<colors.count { if !used.contains(i) { return i } }
         return job.notes.count % colors.count
     }
 
-    var body: some View {
-        // No big button—just the grid
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                // Sort newest first for predictable ordering
-                ForEach(job.notes.sorted(by: { $0.creationDate > $1.creationDate })) { note in
-                    noteTile(for: note)
-                        .onTapGesture {
-                            selectedNote = note
-                            newNoteContent = note.content
-                            newNoteSummary = note.summary
-                            // Bind picker to existing color
-                            editingColorIndex = safeIndex(note.colorIndex)
-                            isEditingNote = true
-                        }
-                }
-            }
-            .padding()
-        }
-        // OLD editor sheet shown only when Beta is OFF
-        .sheet(isPresented: Binding(
-            get: { (isAddingNote || isEditingNote) && !isBetaGlassEnabled },
-            set: { if !$0 { dismissEditor() } }
-        )) { noteEditor }
+    // MARK: - View
 
-        // NEW floating editor panel when Beta is ON
-        .overlay {
-            if (isAddingNote || isEditingNote) && isBetaGlassEnabled {
-                NoteEditorPanel(
-                    isPresented: Binding(
-                        get: { isAddingNote || isEditingNote },
-                        set: { if !$0 { dismissEditor() } }
-                    ),
-                    title: (selectedNote != nil ? "Edit Note" : "New Note"),
-                    summary: $newNoteSummary,
-                    content: $newNoteContent,
-                    colors: colors,
-                    colorIndex: $editingColorIndex,
-                    onCancel: { dismissEditor() },
-                    onSave: { saveNote() }
-                )
-                .zIndex(2)
-            }
+    var body: some View {
+        ScrollView {
+            makeGrid(notes: sortedNotes)
+                .padding()
         }
+        .sheet(isPresented: nonBetaSheetIsPresented) { nonBetaSheet }
+        .overlay { betaOverlay }
         .navigationTitle("Notes")
         .animation(.default, value: job.notes.count)
+        .onChange(of: addNoteTrigger) { _, _ in prepareNewNote() }
+    }
 
-        // ⬅️ React to the parent’s nav-bar “+”
-        .onChange(of: addNoteTrigger) { _, _ in
-            // Prepare a clean editor state
-            selectedNote = nil
-            newNoteContent = ""
-            newNoteSummary = ""
-            editingColorIndex = nextColorIndex
-            isAddingNote = true
+    // MARK: - Builders
+
+    @ViewBuilder
+    private func makeGrid(notes: [Note]) -> some View {
+        let columns: [GridItem] = gridColumns
+        LazyVGrid(columns: columns, spacing: 12) {
+            ForEach(notes) { (note: Note) in
+                noteTile(for: note)
+                    .onTapGesture { openEditor(for: note) }
+            }
         }
     }
 
-    // MARK: - Editor (used only for the non-Beta sheet)
+    private var nonBetaSheetIsPresented: Binding<Bool> {
+        Binding(
+            get: { (isAddingNote || isEditingNote) && !isBetaGlassEnabled },
+            set: { if !$0 { dismissEditor() } }
+        )
+    }
 
+    // Non-Beta rich-text sheet editor
     @ViewBuilder
-    private var noteEditor: some View {
+    private var nonBetaSheet: some View {
         NavigationStack {
             VStack(spacing: 16) {
+                // Summary
                 TextField("Summary (short description)", text: $newNoteSummary)
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
 
-                TextEditor(text: $newNoteContent)
-                    .frame(height: 200)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .padding(.horizontal)
+                // Rich text editor (UIKit-backed)
+                RichTextEditorKit(
+                    attributedText: $editingAttributed,      // ← label fixed
+                    selectedRange: $selectionRange           // make sure this @State exists
+                )
+                .frame(minHeight: 220)
+                .padding(8)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .padding(.horizontal)
 
+                // Color
                 Picker("Color", selection: $editingColorIndex) {
-                    ForEach(0..<colors.count, id: \.self) { index in
+                    ForEach(0..<colors.count, id: \.self) { (index: Int) in
                         Text(colorName(for: index)).tag(index)
                     }
                 }
                 .pickerStyle(.menu)
                 .padding(.horizontal)
 
-                HStack {
+                // Actions: Cancel | Save | (Trash when editing)
+                HStack(spacing: 12) {
                     Button("Cancel") { dismissEditor() }
                         .foregroundStyle(.red)
 
-                    Button("Save") { saveNote() }
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(.green.opacity(0.8))
+                    Button("Save") {
+                        saveNote(attributed: editingAttributed)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.green.opacity(0.85))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .disabled(
+                        newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                        editingAttributed.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+
+                    // 🔥 Delete only when editing an existing note
+                    if selectedNote != nil {
+                        Button {
+                            deleteCurrentNote()               // ensure this helper exists in the view
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 48, height: 44)
+                        }
+                        .background(Color.red.opacity(0.90))
                         .foregroundStyle(.white)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                        .disabled(newNoteContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                  || newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityLabel("Delete Note")
+                    }
                 }
                 .padding(.horizontal)
             }
@@ -143,14 +155,50 @@ struct NotesTabView: View {
         }
     }
 
+
+    // ✅ Beta glass floating panel editor — fixed to use attributed text
+    @ViewBuilder
+    private var betaOverlay: some View {
+        if (isAddingNote || isEditingNote) && isBetaGlassEnabled {
+            NoteEditorPanel(
+                isPresented: Binding(
+                    get: { isAddingNote || isEditingNote },
+                    set: { if !$0 { dismissEditor() } }
+                ),
+                title: (selectedNote != nil ? "Edit Note" : "New Note"),
+                summary: $newNoteSummary,
+                attributedText: $editingAttributed,     // rich text binding
+                colors: colors,
+                colorIndex: $editingColorIndex,
+                onCancel: { dismissEditor() },
+                onSave: {
+                    saveNote(attributed: editingAttributed)          // persist rich text
+                },
+                onDelete: (selectedNote == nil ? nil : {
+                    // Delete only available when editing an existing note
+                    guard let note = selectedNote else { return }
+                    if let idx = job.notes.firstIndex(of: note) {
+                        job.notes.remove(at: idx)
+                    }
+                    modelContext.delete(note)
+                    try? modelContext.save()
+                    dismissEditor()
+                })
+            )
+            .zIndex(2)
+        } else {
+            EmptyView()
+        }
+    }
+
+
     // MARK: - Tiles
 
     private func noteTile(for note: Note) -> some View {
-        let idx = safeIndex(note.colorIndex)
-        let tint = colors[idx]
-        let fg: Color = .black   // always black
-
-        let isGlass = isLiquidGlassEnabled || isBetaGlassEnabled
+        let idx: Int = safeIndex(note.colorIndex)
+        let tint: Color = colors[idx]
+        let fg: Color = .black
+        let isGlass: Bool = (isLiquidGlassEnabled || isBetaGlassEnabled)
         let radius: CGFloat = 16
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -163,7 +211,7 @@ struct NotesTabView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, minHeight: 100)
-        .background(tileBackground(tint: tint, radius: radius))      // ← conditional (Beta/Classic/Solid)
+        .background(tileBackground(tint: tint, radius: radius))
         .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -174,17 +222,13 @@ struct NotesTabView: View {
         .accessibilityElement(children: .combine)
     }
 
-    //Real liquid gladd iOS 18+ BETA
     @ViewBuilder
     private func tileBackground(tint: Color, radius: CGFloat) -> some View {
         if #available(iOS 18.0, *), isBetaGlassEnabled {
             ZStack {
                 Color.clear
-                    .glassEffect(
-                        .regular
-                            .tint(tint.opacity(0.55)),
-                        in: .rect(cornerRadius: radius)
-                    )
+                    .glassEffect(.regular.tint(tint.opacity(0.55)),
+                                 in: .rect(cornerRadius: radius))
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(
                         LinearGradient(
@@ -198,19 +242,14 @@ struct NotesTabView: View {
         } else if isLiquidGlassEnabled {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(.ultraThinMaterial)
+                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .fill(tint.opacity(0.55)))
                 .overlay(
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(tint.opacity(0.55))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.18), .clear],
-                                startPoint: .topTrailing,
-                                endPoint: .bottomLeading
-                            )
-                        )
+                        .fill(LinearGradient(
+                            colors: [Color.white.opacity(0.18), .clear],
+                            startPoint: .topTrailing,
+                            endPoint: .bottomLeading))
                         .blendMode(.plusLighter)
                 )
         } else {
@@ -219,24 +258,70 @@ struct NotesTabView: View {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Actions & Helpers
 
-    private func saveNote() {
-        let trimmedSummary = newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedContent = newNoteContent.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedSummary.isEmpty, !trimmedContent.isEmpty else { return }
+    private func openEditor(for note: Note) {
+        selectedNote = note
+        newNoteContent = note.content
+        newNoteSummary = note.summary
+        editingColorIndex = safeIndex(note.colorIndex)
+        editingAttributed = note.attributed
+        isEditingNote = true
+    }
+
+    private func prepareNewNote() {
+        selectedNote = nil
+        newNoteContent = ""
+        newNoteSummary = ""
+        editingColorIndex = nextColorIndex
+        editingAttributed = NSAttributedString(string: "")
+        isAddingNote = true
+    }
+
+    /// Save helper. If `attributed` is provided, persist full rich text via `Note.attributed`.
+    private func saveNote(attributed: NSAttributedString?) {
+        let trimmedSummary: String = newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let plainBody: String = (attributed?.string ?? newNoteContent)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSummary.isEmpty, !plainBody.isEmpty else { return }
 
         if let note = selectedNote {
             note.summary = trimmedSummary
-            note.content = trimmedContent
             note.colorIndex = safeIndex(editingColorIndex)
+            if let rich = attributed {
+                note.attributed = rich
+            } else {
+                note.content = plainBody
+            }
         } else {
-            let newNote = Note(content: trimmedContent, summary: trimmedSummary, colorIndex: safeIndex(editingColorIndex))
-            job.notes.append(newNote)
+            let idx = safeIndex(editingColorIndex)
+            let new = Note(content: plainBody, summary: trimmedSummary, colorIndex: idx)
+            if let rich = attributed {
+                new.attributed = rich
+            }
+            job.notes.append(new)
         }
+
         try? modelContext.save()
         dismissEditor()
     }
+    
+    // Helper - Permanently delete the note currently being edited
+    private func deleteCurrentNote() {
+        guard let note = selectedNote else { return }
+
+        if let idx = job.notes.firstIndex(of: note) {
+            let removed = job.notes.remove(at: idx)   // unlink from the job
+            modelContext.delete(removed)              // permanently delete
+        } else {
+            // Fallback: if it wasn't in the array (edge case), still try to delete it
+            modelContext.delete(note)
+        }
+
+        try? modelContext.save()
+        dismissEditor()                               // resets editor state & selectedNote
+    }
+
 
     private func dismissEditor() {
         isAddingNote = false
@@ -244,7 +329,11 @@ struct NotesTabView: View {
         newNoteContent = ""
         newNoteSummary = ""
         selectedNote = nil
+        selectionRange = NSRange(location: 0, length: 0)
+        editingAttributed = NSAttributedString(string: "")
     }
+
+    // MARK: - Helpers
 
     private func colorName(for index: Int) -> String {
         switch safeIndex(index) {
