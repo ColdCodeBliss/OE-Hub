@@ -31,7 +31,7 @@ struct MindMapTabView: View {
     private var isLandscape: Bool { viewSize.width > viewSize.height }
     private var slideDistance: CGFloat { isLandscape ? 156 : 94 }
     private var expandedTrailingPad: CGFloat { isLandscape ? -55 : 9 }
-    private var collapsedTrailingPad: CGFloat { isLandscape ? 4 : 4 }
+    private var collapsedTrailingPad: CGFloat { isLandscape ? -40 : -40 }
 
     // ✅ Share state: present sheet only when we have a URL
     private struct ShareItem: Identifiable { let id = UUID(); let url: URL }
