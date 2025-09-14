@@ -17,10 +17,14 @@ struct NoteEditorPanel: View {
     var onCancel: () -> Void
     var onSave: () -> Void
 
-    // ⬅️ NEW: provide this only when editing to show the trash button
+    // Show trash only when editing an existing note
     var onDelete: (() -> Void)? = nil
 
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
+
+    // MARK: - Bullet config
+    private let bulletPrefix = "•\t"     // bullet + tab for nice alignment
+    private let bulletIndent: CGFloat = 24
 
     var body: some View {
         ZStack {
@@ -69,11 +73,16 @@ struct NoteEditorPanel: View {
                         }
 
                         // Editor
-                        RichTextEditorKit(attributedText: $attributedText, selectedRange: $selectedRange)
-                            .frame(minHeight: 200)
-                            .padding(8)
-                            .background(innerCardBackground(corner: 12))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                        RichTextEditorKit(
+                            attributedText: $attributedText,
+                            selectedRange: $selectedRange,
+                            bulletPrefix: bulletPrefix,
+                            bulletIndent: bulletIndent
+                        )
+                        .frame(minHeight: 200)
+                        .padding(8)
+                        .background(innerCardBackground(corner: 12))
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                     }
                     .padding(16)
                 }
@@ -94,7 +103,6 @@ struct NoteEditorPanel: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12))
                     .disabled(!saveEnabled)
 
-                    // ⬅️ NEW: Trashcan appears only when onDelete is present (i.e., editing)
                     if onDelete != nil {
                         Button(role: .destructive) {
                             onDelete?()
@@ -192,7 +200,7 @@ struct NoteEditorPanel: View {
         let range = normalizedSelection()
         let m = NSMutableAttributedString(attributedString: attributedText)
         m.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
-            let base = (value as? UIFont) ?? UIFont.systemFont(ofSize: UIFont.systemFontSize)
+            let base = (value as? UIFont) ?? UIFont.preferredFont(forTextStyle: .body)
             let hasBold = base.fontDescriptor.symbolicTraits.contains(.traitBold)
             let newDescriptor = base.fontDescriptor.withSymbolicTraits(
                 hasBold ? base.fontDescriptor.symbolicTraits.subtracting(.traitBold)
@@ -228,31 +236,107 @@ struct NoteEditorPanel: View {
         attributedText = m
     }
 
+    /// Turns the current paragraph(s) into bullets with proper paragraph style.
     private func insertBulletedList() {
-        let ns = attributedText.string as NSString
-        let pr = ns.paragraphRange(for: normalizedSelection())
-        let m = NSMutableAttributedString(attributedString: attributedText)
+        let current = attributedText
+        let ns = current.string as NSString
+        var sel = normalizedSelection()
 
-        let paraText = ns.substring(with: pr)
-        let lines = paraText.split(maxSplits: .max, omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        // If document is empty: insert a brand new bullet line
+        if current.length == 0 {
+            let attrs = attributesForInsertion(at: 0, fallbackOnly: true)
+            let p = bulletParagraphStyle(basedOn: attrs[.paragraphStyle] as? NSParagraphStyle)
+            var merged = attrs
+            merged[.paragraphStyle] = p
 
-        var cursor = pr.location
-        for line in lines {
-            let lineStr = String(line)
-            let lineNS = lineStr as NSString
-            let lineRange = NSRange(location: cursor, length: lineNS.length)
+            let m = NSMutableAttributedString()
+            m.append(NSAttributedString(string: bulletPrefix, attributes: merged))
+            attributedText = m
+            selectedRange = NSRange(location: bulletPrefix.count, length: 0)
+            return
+        }
 
-            if !lineStr.hasPrefix("• ") && !lineStr.hasPrefix("- ") {
-                m.insert(NSAttributedString(string: "• "), at: lineRange.location)
-                cursor += 2 + lineNS.length
-            } else {
-                cursor += lineNS.length
+        // Expand to whole paragraphs if just a caret
+        if sel.length == 0 {
+            sel = ns.paragraphRange(for: sel)
+        }
+
+        // Walk paragraphs within selection
+        var offset = 0
+        let m = NSMutableAttributedString(attributedString: current)
+        ns.enumerateSubstrings(in: sel, options: [.byParagraphs, .substringNotRequired]) { _, pr, _, _ in
+            let insertLoc = pr.location + offset
+            // Get actual text to check if already bulleted
+            let lineText = ns.substring(with: pr)
+            if lineText.hasPrefix(self.bulletPrefix) || lineText.hasPrefix("• ") || lineText.hasPrefix("- ") {
+                // Ensure paragraph style is correct (reapply)
+                let attrs = self.attributesForInsertion(at: insertLoc, fallbackOnly: true)
+                let p = self.bulletParagraphStyle(basedOn: attrs[.paragraphStyle] as? NSParagraphStyle)
+                m.addAttribute(.paragraphStyle, value: p, range: NSRange(location: insertLoc, length: pr.length))
+                return
             }
-            if cursor < ns.length, ns.substring(with: NSRange(location: cursor, length: 1)) == "\n" {
-                cursor += 1
+
+            // Insert bullet and tab, and apply paragraph style
+            let attrs = self.attributesForInsertion(at: insertLoc, fallbackOnly: true)
+            let p = self.bulletParagraphStyle(basedOn: attrs[.paragraphStyle] as? NSParagraphStyle)
+            var merged = attrs
+            merged[.paragraphStyle] = p
+
+            m.insert(NSAttributedString(string: self.bulletPrefix, attributes: merged), at: insertLoc)
+            offset += self.bulletPrefix.count
+            // Also apply the paragraph style across the paragraph’s new range
+            let styledRange = NSRange(location: insertLoc, length: pr.length + self.bulletPrefix.count)
+            m.addAttribute(.paragraphStyle, value: p, range: styledRange)
+        }
+
+        attributedText = m
+        // If caret was inside first paragraph start, nudge past bullet
+        if selectedRange.length == 0 {
+            let firstPara = ns.paragraphRange(for: selectedRange)
+            if selectedRange.location == firstPara.location {
+                selectedRange = NSRange(location: selectedRange.location + bulletPrefix.count, length: 0)
             }
         }
-        attributedText = m
+    }
+
+    // MARK: - Paragraph style helpers
+
+    private func bulletParagraphStyle(basedOn base: NSParagraphStyle?) -> NSParagraphStyle {
+        let p = (base?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        // Align text after a bullet + tab
+        p.firstLineHeadIndent = 0
+        p.headIndent = bulletIndent
+        p.defaultTabInterval = bulletIndent
+        p.tabStops = [NSTextTab(textAlignment: .left, location: bulletIndent, options: [:])]
+        return p
+    }
+
+    private func normalParagraphStyle(basedOn base: NSParagraphStyle?) -> NSParagraphStyle {
+        let p = (base?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        p.firstLineHeadIndent = 0
+        p.headIndent = 0
+        p.tabStops = []
+        p.defaultTabInterval = 0
+        return p
+    }
+
+    // MARK: - Selection + attributes
+
+    private func attributesForInsertion(at location: Int, fallbackOnly: Bool) -> [NSAttributedString.Key: Any] {
+        // Safeguard
+        let loc = max(0, min(location, max(attributedText.length - 1, 0)))
+        var attrs = attributedText.length > 0 ? attributedText.attributes(at: loc, effectiveRange: nil) : [:]
+
+        let hasFont = attrs[.font] != nil
+        let hasColor = attrs[.foregroundColor] != nil
+
+        if fallbackOnly || !hasFont {
+            attrs[.font] = (attrs[.font] as? UIFont) ?? UIFont.preferredFont(forTextStyle: .body)
+        }
+        if fallbackOnly || !hasColor {
+            attrs[.foregroundColor] = (attrs[.foregroundColor] as? UIColor) ?? UIColor.label
+        }
+        return attrs
     }
 
     private func normalizedSelection() -> NSRange {
@@ -289,10 +373,14 @@ struct NoteEditorPanel: View {
     }
 }
 
-// MARK: - UITextView-backed rich editor
+// MARK: - UITextView-backed rich editor with bullet continuation
 struct RichTextEditorKit: UIViewRepresentable {
     @Binding var attributedText: NSAttributedString
     @Binding var selectedRange: NSRange
+
+    // Bullet configuration injected from the panel
+    let bulletPrefix: String
+    let bulletIndent: CGFloat
 
     func makeUIView(context: Context) -> UITextView {
         let tv = UITextView()
@@ -304,8 +392,6 @@ struct RichTextEditorKit: UIViewRepresentable {
         tv.textContainerInset = UIEdgeInsets(top: 8, left: 6, bottom: 8, right: 6)
         tv.font = UIFont.preferredFont(forTextStyle: .body)
         tv.adjustsFontForContentSizeCategory = true
-
-        // allow inline styling operations to apply
         tv.allowsEditingTextAttributes = true
 
         tv.attributedText = attributedText
@@ -327,6 +413,118 @@ struct RichTextEditorKit: UIViewRepresentable {
     class Coordinator: NSObject, UITextViewDelegate {
         var parent: RichTextEditorKit
         init(_ parent: RichTextEditorKit) { self.parent = parent }
+
+        // Continue / end bullet lists on Return
+        func textView(_ textView: UITextView,
+                      shouldChangeTextIn range: NSRange,
+                      replacementText text: String) -> Bool {
+            guard text == "\n" else { return true }
+
+            let att = textView.attributedText ?? NSAttributedString(string: "")
+            let ns = att.string as NSString
+            let caret = range.location
+            let paraRange = ns.paragraphRange(for: NSRange(location: caret, length: 0))
+            let line = ns.substring(with: paraRange)
+
+            let hasBullet = line.hasPrefix(parent.bulletPrefix) || line.hasPrefix("• ") || line.hasPrefix("- ")
+
+            // If not a bullet paragraph → allow default newline
+            if !hasBullet { return true }
+
+            // Determine text (minus prefix) to see if it's empty
+            let contentAfterPrefix: String = {
+                if line.hasPrefix(parent.bulletPrefix) {
+                    return String(line.dropFirst(parent.bulletPrefix.count)).trimmingCharacters(in: .whitespaces)
+                } else if line.hasPrefix("• ") {
+                    return String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                } else if line.hasPrefix("- ") {
+                    return String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+                }
+                return line.trimmingCharacters(in: .whitespaces)
+            }()
+
+            // Prepare mutable copy
+            let m = NSMutableAttributedString(attributedString: att)
+
+            // Grab current typing attributes (font/color)
+            // In RichTextEditorKit.Coordinator -> shouldChangeTextIn:
+            let typingAttrs = textView.typingAttributes   // was: var typingAttrs = ...
+            let baseFont = (typingAttrs[.font] as? UIFont) ?? UIFont.preferredFont(forTextStyle: .body)
+            let baseColor = (typingAttrs[.foregroundColor] as? UIColor) ?? .label
+
+            // Paragraph styles
+            let bulletStyle: NSParagraphStyle = {
+                let p = (typingAttrs[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+                p.firstLineHeadIndent = 0
+                p.headIndent = parent.bulletIndent
+                p.defaultTabInterval = parent.bulletIndent
+                p.tabStops = [NSTextTab(textAlignment: .left, location: parent.bulletIndent, options: [:])]
+                return p
+            }()
+
+            let normalStyle: NSParagraphStyle = {
+                let p = (typingAttrs[.paragraphStyle] as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle ?? NSMutableParagraphStyle()
+                p.firstLineHeadIndent = 0
+                p.headIndent = 0
+                p.tabStops = []
+                p.defaultTabInterval = 0
+                return p
+            }()
+
+            if contentAfterPrefix.isEmpty {
+                // END LIST: Remove the bullet-only paragraph and insert a normal newline
+                // 1) Delete entire paragraph (which currently contains only a bullet)
+                m.replaceCharacters(in: paraRange, with: NSAttributedString(string: ""))
+                // 2) Insert a plain newline at the original paragraph start
+                let insertLoc = paraRange.location
+                let nl = NSAttributedString(string: "\n", attributes: [
+                    .font: baseFont,
+                    .foregroundColor: baseColor,
+                    .paragraphStyle: normalStyle
+                ])
+                m.insert(nl, at: insertLoc)
+
+                textView.attributedText = m
+                textView.selectedRange = NSRange(location: insertLoc + 1, length: 0)
+                // Update SwiftUI bindings
+                DispatchQueue.main.async {
+                    self.parent.attributedText = textView.attributedText
+                    self.parent.selectedRange = textView.selectedRange
+                }
+                return false
+            } else {
+                // CONTINUE LIST: Insert newline + fresh bullet with bullet paragraph style
+                let insertLoc = range.location
+                let continuation = NSMutableAttributedString(string: "\n", attributes: [
+                    .font: baseFont,
+                    .foregroundColor: baseColor,
+                    .paragraphStyle: bulletStyle
+                ])
+                continuation.append(NSAttributedString(string: self.parent.bulletPrefix, attributes: [
+                    .font: baseFont,
+                    .foregroundColor: baseColor,
+                    .paragraphStyle: bulletStyle
+                ]))
+
+                m.replaceCharacters(in: range, with: continuation)
+
+                textView.attributedText = m
+                textView.selectedRange = NSRange(location: insertLoc + continuation.length, length: 0)
+                // Keep typing attributes consistent for the next characters
+                var nextTyping = textView.typingAttributes
+                nextTyping[.paragraphStyle] = bulletStyle
+                nextTyping[.font] = baseFont
+                nextTyping[.foregroundColor] = baseColor
+                textView.typingAttributes = nextTyping
+
+                // Update SwiftUI bindings
+                DispatchQueue.main.async {
+                    self.parent.attributedText = textView.attributedText
+                    self.parent.selectedRange = textView.selectedRange
+                }
+                return false
+            }
+        }
 
         func textViewDidChange(_ textView: UITextView) {
             let newValue: NSAttributedString = textView.attributedText ?? NSAttributedString(string: "")

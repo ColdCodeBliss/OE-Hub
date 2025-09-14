@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct NotesTabView: View {
     @Environment(\.modelContext) private var modelContext
@@ -17,7 +18,6 @@ struct NotesTabView: View {
 
     // Color picker state
     @State private var editingColorIndex: Int = 0
-    
 
     // Style toggles
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
@@ -31,6 +31,10 @@ struct NotesTabView: View {
     // MARK: - Precomputed constants
     private let colors: [Color] = [.red, .blue, .green, .orange, .yellow, .purple, .brown, .teal]
     private let gridColumns: [GridItem] = [GridItem(.flexible()), GridItem(.flexible())]
+
+    // 🔹 Bullet configuration for the UIKit editor (matches NoteEditorPanel)
+    private let bulletPrefix: String = "•\t"
+    private let bulletIndent: CGFloat = 24
 
     private var sortedNotes: [Note] {
         let notes: [Note] = job.notes
@@ -77,7 +81,7 @@ struct NotesTabView: View {
         )
     }
 
-    // Non-Beta rich-text sheet editor
+    // Non-Beta rich-text sheet editor (now with formatting toolbar)
     @ViewBuilder
     private var nonBetaSheet: some View {
         NavigationStack {
@@ -87,10 +91,22 @@ struct NotesTabView: View {
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
 
+                // 🔹 Formatting toolbar (same actions as Beta)
+                HStack(spacing: 10) {
+                    formatButton(system: "bold", label: "Bold") { nb_toggleBold() }
+                    formatButton(system: "underline", label: "Underline") { nb_toggleUnderline() }
+                    formatButton(system: "strikethrough", label: "Strikethrough") { nb_toggleStrikethrough() }
+                    formatButton(system: "list.bullet", label: "Bulleted List") { nb_insertBulletedList() }
+                    Spacer()
+                }
+                .padding(.horizontal)
+
                 // Rich text editor (UIKit-backed)
                 RichTextEditorKit(
-                    attributedText: $editingAttributed,      // ← label fixed
-                    selectedRange: $selectionRange           // make sure this @State exists
+                    attributedText: $editingAttributed,
+                    selectedRange: $selectionRange,
+                    bulletPrefix: bulletPrefix,
+                    bulletIndent: bulletIndent
                 )
                 .frame(minHeight: 220)
                 .padding(8)
@@ -125,10 +141,10 @@ struct NotesTabView: View {
                         editingAttributed.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
 
-                    // 🔥 Delete only when editing an existing note
+                    // Delete only when editing an existing note
                     if selectedNote != nil {
                         Button {
-                            deleteCurrentNote()               // ensure this helper exists in the view
+                            deleteCurrentNote()
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 16, weight: .semibold))
@@ -155,8 +171,7 @@ struct NotesTabView: View {
         }
     }
 
-
-    // ✅ Beta glass floating panel editor — fixed to use attributed text
+    // Beta glass floating panel editor — uses NoteEditorPanel (already passes bullets internally)
     @ViewBuilder
     private var betaOverlay: some View {
         if (isAddingNote || isEditingNote) && isBetaGlassEnabled {
@@ -167,15 +182,14 @@ struct NotesTabView: View {
                 ),
                 title: (selectedNote != nil ? "Edit Note" : "New Note"),
                 summary: $newNoteSummary,
-                attributedText: $editingAttributed,     // rich text binding
+                attributedText: $editingAttributed,
                 colors: colors,
                 colorIndex: $editingColorIndex,
                 onCancel: { dismissEditor() },
                 onSave: {
-                    saveNote(attributed: editingAttributed)          // persist rich text
+                    saveNote(attributed: editingAttributed)
                 },
                 onDelete: (selectedNote == nil ? nil : {
-                    // Delete only available when editing an existing note
                     guard let note = selectedNote else { return }
                     if let idx = job.notes.firstIndex(of: note) {
                         job.notes.remove(at: idx)
@@ -190,7 +204,6 @@ struct NotesTabView: View {
             EmptyView()
         }
     }
-
 
     // MARK: - Tiles
 
@@ -305,23 +318,20 @@ struct NotesTabView: View {
         try? modelContext.save()
         dismissEditor()
     }
-    
-    // Helper - Permanently delete the note currently being edited
+
     private func deleteCurrentNote() {
         guard let note = selectedNote else { return }
 
         if let idx = job.notes.firstIndex(of: note) {
-            let removed = job.notes.remove(at: idx)   // unlink from the job
-            modelContext.delete(removed)              // permanently delete
+            let removed = job.notes.remove(at: idx)
+            modelContext.delete(removed)
         } else {
-            // Fallback: if it wasn't in the array (edge case), still try to delete it
             modelContext.delete(note)
         }
 
         try? modelContext.save()
-        dismissEditor()                               // resets editor state & selectedNote
+        dismissEditor()
     }
-
 
     private func dismissEditor() {
         isAddingNote = false
@@ -331,6 +341,117 @@ struct NotesTabView: View {
         selectedNote = nil
         selectionRange = NSRange(location: 0, length: 0)
         editingAttributed = NSAttributedString(string: "")
+    }
+
+    // MARK: - Formatting helpers for non-Beta sheet
+
+    private func formatButton(system: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func nb_normalizedSelection() -> NSRange {
+        var r = selectionRange
+        if r.location == NSNotFound { r = NSRange(location: 0, length: 0) }
+        if r.length == 0 {
+            let ns = editingAttributed.string as NSString
+            r = ns.paragraphRange(for: r)
+        }
+        let maxLen = max(0, editingAttributed.length)
+        let loc = min(max(0, r.location), maxLen)
+        let len = min(max(0, r.length), maxLen - loc)
+        return NSRange(location: loc, length: len)
+    }
+
+    private func nb_toggleBold() {
+        guard editingAttributed.length > 0 else { return }
+        let range = nb_normalizedSelection()
+        let m = NSMutableAttributedString(attributedString: editingAttributed)
+        m.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
+            let base = (value as? UIFont) ?? UIFont.preferredFont(forTextStyle: .body)
+            let traits = base.fontDescriptor.symbolicTraits
+            let hasBold = traits.contains(.traitBold)
+            let newDesc = base.fontDescriptor.withSymbolicTraits(
+                hasBold ? traits.subtracting(.traitBold) : traits.union(.traitBold)
+            )
+            let newFont = newDesc.flatMap { UIFont(descriptor: $0, size: base.pointSize) } ?? base
+            m.addAttribute(.font, value: newFont, range: subRange)
+        }
+        editingAttributed = m
+    }
+
+    private func nb_toggleUnderline() {
+        guard editingAttributed.length > 0 else { return }
+        let range = nb_normalizedSelection()
+        let m = NSMutableAttributedString(attributedString: editingAttributed)
+        m.enumerateAttribute(.underlineStyle, in: range, options: []) { value, subRange, _ in
+            let isOn = (value as? Int ?? 0) != 0
+            if isOn { m.removeAttribute(.underlineStyle, range: subRange) }
+            else { m.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: subRange) }
+        }
+        editingAttributed = m
+    }
+
+    private func nb_toggleStrikethrough() {
+        guard editingAttributed.length > 0 else { return }
+        let range = nb_normalizedSelection()
+        let m = NSMutableAttributedString(attributedString: editingAttributed)
+        m.enumerateAttribute(.strikethroughStyle, in: range, options: []) { value, subRange, _ in
+            let isOn = (value as? Int ?? 0) != 0
+            if isOn { m.removeAttribute(.strikethroughStyle, range: subRange) }
+            else { m.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: subRange) }
+        }
+        editingAttributed = m
+    }
+
+    private func nb_insertBulletedList() {
+        // Insert bullets for each paragraph in the current selection.
+        let ns = editingAttributed.string as NSString
+        let pr = ns.paragraphRange(for: nb_normalizedSelection())
+        let m = NSMutableAttributedString(attributedString: editingAttributed)
+
+        var cursor = pr.location
+        while cursor < pr.location + pr.length {
+            let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+
+            // Attributes at start of the line so bullet inherits color/size
+            let attrs = m.attributes(at: lineRange.location, effectiveRange: nil)
+
+            // Already bulleted?
+            let lineText = (m.string as NSString).substring(with: lineRange)
+            let already = lineText.hasPrefix(bulletPrefix)
+
+            if !already {
+                // Build bullet with paragraph style for indent/tab stop
+                let bullet = NSMutableAttributedString(string: bulletPrefix, attributes: attrs)
+
+                let ps = (attrs[.paragraphStyle] as? NSMutableParagraphStyle) ?? {
+                    let s = NSMutableParagraphStyle()
+                    return s
+                }()
+                ps.tabStops = [NSTextTab(textAlignment: .left, location: bulletIndent)]
+                ps.defaultTabInterval = bulletIndent
+                ps.headIndent = bulletIndent
+                ps.firstLineHeadIndent = 0
+
+                bullet.addAttribute(.paragraphStyle, value: ps, range: NSRange(location: 0, length: bullet.length))
+                m.insert(bullet, at: lineRange.location)
+
+                // line grew by bulletPrefix.count (including the tab) — advance cursor
+                cursor = lineRange.location + bullet.length + lineRange.length
+            } else {
+                cursor = lineRange.location + lineRange.length
+            }
+        }
+
+        editingAttributed = m
     }
 
     // MARK: - Helpers
