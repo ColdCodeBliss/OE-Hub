@@ -59,6 +59,23 @@ func priorityColor<P: RawRepresentable>(for priority: P) -> Color where P.RawVal
     }
 }
 
+struct GitHubIcon: View {
+    var body: some View {
+        Group {
+            #if canImport(UIKit)
+            if UIImage(named: "github") != nil {
+                Image("github").renderingMode(.template)
+            } else {
+                Image(systemName: "chevron.left.slash.chevron.right")
+            }
+            #else
+            Image(systemName: "chevron.left.slash.chevron.right")
+            #endif
+        }
+        .font(.system(size: 18, weight: .semibold))
+    }
+}
+
 // MARK: - Readable foreground for colored cards
 //
 // Chooses white or black text depending on background luminance (WCAG-ish).
