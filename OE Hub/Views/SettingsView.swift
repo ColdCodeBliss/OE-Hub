@@ -49,7 +49,7 @@ struct SettingsView: View {
                                 )
                             )
                         } else {
-                            Toggle("Liquid Glass (Beta, iOS 18+)", isOn: .constant(false))
+                            Toggle("Liquid Glass (Beta, iOS 20+)", isOn: .constant(false))
                                 .disabled(true)
                                 .foregroundStyle(.secondary)
                         }
@@ -60,7 +60,7 @@ struct SettingsView: View {
                                 useBetaGlass: useBetaGlass,
                                 useClassicGlass: useClassicGlass) {
 
-                        Link("Contact Support", destination: URL(string: "mailto:support@workforge.app")!)
+                        Link("Bug Submission", destination: URL(string: "mailto:support@workforge.app")!)
 
                         if #available(iOS 26.0, *), useBetaGlass {
                             Button("Donate") { showDonateSheet = true }
@@ -82,7 +82,7 @@ struct SettingsView: View {
 
                     // MARK: About
                     SectionCard(useBetaGlass: useBetaGlass, useClassicGlass: useClassicGlass) {
-                        Text("NexusForge Stack helps OE professionals manage jobs, deliverables, and checklists efficiently.")
+                        Text(".nexusStack helps freelancers, teams, and OE professionals manage jobs, deliverables, and GitHub repo's efficiently.")
                             .foregroundStyle(.secondary)
                     }
                 }
