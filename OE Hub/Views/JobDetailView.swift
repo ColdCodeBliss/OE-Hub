@@ -28,8 +28,10 @@ struct JobDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { trailingButton }
             }
+            // Present the GitHub browser (namespaced by this Job’s key)
             .sheet(isPresented: $showGitHubBrowser) {
-                GitHubBrowserView()
+                // ✅ Use the same per-job key everywhere
+                GitHubBrowserView(recentKey: "recentRepos.\(job.repoBucketKey)")
             }
     }
 
@@ -99,26 +101,21 @@ struct JobDetailView: View {
         case .due:
             Button("Add Deliverable", systemImage: "plus") { addDeliverableTrigger &+= 1 }
                 .accessibilityLabel("Add Deliverable")
-
         case .notes:
             Button("Add Note", systemImage: "plus") { addNoteTrigger &+= 1 }
                 .accessibilityLabel("Add Note")
-
         case .checklist:
             Button("Add Item", systemImage: "plus") { addChecklistTrigger &+= 1 }
                 .accessibilityLabel("Add Checklist Item")
-
         case .info:
-            // Use asset image "github" from Assets.xcassets
             Button(action: { showGitHubBrowser = true }) {
                 Image("github")
-                    .renderingMode(.original)        // keep original colors
+                    .renderingMode(.original)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 22, height: 22)    // toolbar-friendly size
+                    .frame(width: 22, height: 22)
                     .accessibilityLabel("Open GitHub Browser")
             }
-
         default:
             EmptyView()
         }

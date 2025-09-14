@@ -34,7 +34,8 @@ final class Job {
     var jobType: String? = "Full-time"     // Stored string; see `type` wrapper below.
     var contractEndDate: Date?
     var colorCode: String? = "green"       // Stored string; see `color` wrapper below.
-
+    var repoBucketKey: String = UUID().uuidString //stable namespace for per-job settings (recent repos)
+    
     init(title: String) {
         self.title = title
         self.creationDate = Date()

@@ -6,7 +6,7 @@
 //
 import SwiftUI
 import Foundation
-import PDFKit   // ← for inline PDF preview
+import UniformTypeIdentifiers
 
 // MARK: - Models
 
@@ -24,17 +24,10 @@ fileprivate struct ContentItem: Decodable, Identifiable {
     let size: Int?
     let type: String           // "file" | "dir" | "symlink" | "submodule"
     let download_url: String?  // only for files
-    let html_url: String?
+    let html_url: String?      // nice to have
     let encoding: String?
     let content: String?
     var id: String { sha }
-}
-
-// Recent repo persistence (UserDefaults via AppStorage)
-fileprivate struct SavedRepo: Codable, Equatable, Identifiable {
-    var url: String
-    var savedAt: Date
-    var id: String { url }
 }
 
 // MARK: - Service
@@ -62,7 +55,6 @@ fileprivate enum GHService {
         return try JSONDecoder().decode([ContentItem].self, from: data)
     }
 
-    /// Fetch a single file's content payload via the Contents API (returns base64-encoded text for text files)
     static func fetchFile(owner: String, repo: String, path: String, ref: String) async throws -> ContentItem {
         var comps = URLComponents(url: base.appending(path: "/repos/\(owner)/\(repo)/contents/\(path)"), resolvingAgainstBaseURL: false)!
         comps.queryItems = [URLQueryItem(name: "ref", value: ref)]
@@ -73,7 +65,6 @@ fileprivate enum GHService {
         return try JSONDecoder().decode(ContentItem.self, from: data)
     }
 
-    /// Raw download (useful for images/PDFs, or large files)
     static func fetchRaw(url: URL) async throws -> Data {
         let (data, resp) = try await URLSession.shared.data(from: url)
         guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -83,10 +74,18 @@ fileprivate enum GHService {
     }
 }
 
-// MARK: - Main Browser View
+// MARK: - Main Browser View (per-job recents)
 
 struct GitHubBrowserView: View {
     @Environment(\.dismiss) private var dismiss
+
+    /// Per-job UserDefaults key (namespaced by Job.repoBucketKey via caller)
+    let recentKey: String
+    /// Max recent repos to keep (change to 5 or 10 later if desired)
+    let maxRecents: Int = 3
+
+    // MARK: Persistence via @AppStorage (dynamic key)
+    @AppStorage private var recentReposJSON: String
 
     // Input
     @State private var repoURLString: String = ""
@@ -106,13 +105,16 @@ struct GitHubBrowserView: View {
     @State private var fileText: String = ""
     @State private var fileData: Data? = nil
     @State private var fileIsText: Bool = true
-    @State private var fileIsPDF: Bool = false
     @State private var fileDownloadURL: URL? = nil
-    @State private var fileExt: String = ""
 
-    // Recents (persisted)
-    @AppStorage("gh_recent_repos") private var recentJSON: String = "[]"
-    @State private var recents: [SavedRepo] = []
+    // Per-job recents (in-memory working copy)
+    @State private var recentRepos: [String] = []
+
+    // Bind @AppStorage to dynamic key
+    init(recentKey: String) {
+        self.recentKey = recentKey
+        self._recentReposJSON = AppStorage(wrappedValue: "[]", recentKey)
+    }
 
     var body: some View {
         NavigationStack {
@@ -142,53 +144,42 @@ struct GitHubBrowserView: View {
                         }
                         .padding(.horizontal)
 
-                        if let err = errorMessage {
-                            Text(err)
-                                .foregroundStyle(.red)
-                                .font(.footnote)
-                                .padding(.horizontal)
-                        }
-
-                        // Recent repos
-                        if !recents.isEmpty {
+                        // Recent per-job repos
+                        if !recentRepos.isEmpty {
                             VStack(alignment: .leading, spacing: 8) {
-                                Text("Recent")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal)
-
-                                ForEach(recents.sorted(by: { $0.savedAt > $1.savedAt })) { r in
-                                    Button {
-                                        repoURLString = r.url
-                                        Task { await loadFromURL() }
-                                    } label: {
-                                        HStack(spacing: 10) {
-                                            Image(systemName: "clock")
-                                                .foregroundStyle(.secondary)
-                                            Text(prettyName(for: r.url))
-                                                .lineLimit(1)
-                                            Spacer()
+                                Text("Recent").font(.subheadline).foregroundStyle(.secondary)
+                                FlowLayout(spacing: 8) {
+                                    ForEach(recentRepos, id: \.self) { url in
+                                        Button {
+                                            repoURLString = url
+                                            Task { await loadFromURL() }
+                                        } label: {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: "clock.arrow.circlepath")
+                                                Text(shortLabel(for: url))
+                                            }
+                                            .font(.caption)
+                                            .padding(.horizontal, 10)
+                                            .padding(.vertical, 6)
+                                            .background(Color.gray.opacity(0.15))
+                                            .clipShape(Capsule())
                                         }
-                                        .padding(.vertical, 8)
-                                        .padding(.horizontal, 12)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 10)
-                                                .fill(Color(.secondarySystemBackground))
-                                        )
+                                        .buttonStyle(.plain)
                                     }
-                                    .buttonStyle(.plain)
-                                    .padding(.horizontal)
                                 }
                             }
-                            .padding(.top, 8)
+                            .padding(.horizontal)
+                        }
+
+                        if let err = errorMessage {
+                            Text(err).foregroundStyle(.red).font(.footnote)
+                                .padding(.horizontal)
                         }
 
                         Spacer()
                     }
                     .padding(.top, 24)
-                    .onAppear {
-                        recents = loadRecents()
-                    }
+                    .onAppear { loadRecents() }
                 } else {
                     // Directory listing
                     List {
@@ -204,7 +195,7 @@ struct GitHubBrowserView: View {
 
                         ForEach(items) { item in
                             HStack {
-                                Image(systemName: item.type == "dir" ? "folder" : "doc.text")
+                                Image(systemName: iconName(for: item))
                                     .foregroundStyle(item.type == "dir" ? .yellow : .secondary)
                                 VStack(alignment: .leading) {
                                     Text(item.name).font(.body)
@@ -218,9 +209,7 @@ struct GitHubBrowserView: View {
                             }
                         }
                     }
-                    .overlay {
-                        if isLoading { ProgressView().scaleEffect(1.2) }
-                    }
+                    .overlay { if isLoading { ProgressView().scaleEffect(1.2) } }
                 }
             }
             .navigationTitle(repoTitle)
@@ -258,8 +247,7 @@ struct GitHubBrowserView: View {
 
     private func loadFromURL() async {
         errorMessage = nil
-        let raw = repoURLString.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let parsed = parseRepoURL(raw) else {
+        guard let parsed = parseRepoURL(repoURLString) else {
             errorMessage = "Unable to parse owner/repo from URL."
             return
         }
@@ -271,8 +259,8 @@ struct GitHubBrowserView: View {
             currentPath = parsed.initialPath ?? ""
             items = try await GHService.listContents(owner: parsed.owner, repo: parsed.name, path: currentPath.isEmpty ? nil : currentPath, ref: branch)
 
-            // Save (or bump) in recents after a successful load
-            saveRecent(url: raw)
+            // Save to per-job recents
+            pushRecent(url: repoURLString)
         } catch {
             errorMessage = "Failed to load repository. Please check the URL and try again."
             repo = nil
@@ -299,100 +287,40 @@ struct GitHubBrowserView: View {
             return
         }
 
+        // File tap
         isLoading = true
         defer { isLoading = false }
-
-        let ext = (item.name as NSString).pathExtension.lowercased()
-        fileExt = ext
-
         do {
-            // Fetch full content via the API (for text/base64)
+            // Fetch full content via the API to get base64 for text files
             let file = try await GHService.fetchFile(owner: r.owner, repo: r.name, path: item.path, ref: branch)
             fileTitle = item.name
             fileDownloadURL = file.download_url.flatMap(URL.init(string:))
 
-            // 1) Try base64 text path first (GitHub returns base64 for text files)
-            if let enc = file.encoding?.lowercased(), enc == "base64", let b64 = file.content {
-                if let data = Data(base64Encoded: b64) {
-                    if isTextExtension(ext) {
-                        fileText = String(decoding: data, as: UTF8.self)
-                        fileIsText = true
-                        fileIsPDF = false
-                        fileData = nil
-                        showingFile = true
-                        return
-                    }
-                    if isImageExtension(ext), let img = UIImage(data: data), img.cgImage != nil {
-                        fileData = data
-                        fileIsText = false
-                        fileIsPDF = false
-                        showingFile = true
-                        return
-                    }
-                    if ext == "pdf" {
-                        fileData = data
-                        fileIsText = false
-                        fileIsPDF = true
-                        showingFile = true
-                        return
-                    }
-                    // If unknown but decodes as UTF-8 reasonably, show as text
-                    if let str = String(data: data, encoding: .utf8), looksLikeText(str) {
-                        fileText = str
-                        fileIsText = true
-                        fileIsPDF = false
-                        fileData = nil
-                        showingFile = true
-                        return
-                    }
-                }
-            }
-
-            // 2) Fallback to raw download (images, PDFs, or when base64 path wasn't text)
-            if let rawURL = fileDownloadURL {
-                let data = try await GHService.fetchRaw(url: rawURL)
-                if isImageExtension(ext), let img = UIImage(data: data), img.cgImage != nil {
-                    fileData = data
-                    fileIsText = false
-                    fileIsPDF = false
-                    showingFile = true
-                    return
-                }
-                if ext == "pdf" {
-                    fileData = data
-                    fileIsText = false
-                    fileIsPDF = true
-                    showingFile = true
-                    return
-                }
-                // Try as UTF-8 text if extension is text-like or payload seems textual
-                if isTextExtension(ext) {
-                    fileText = String(decoding: data, as: UTF8.self)
-                    fileIsText = true
-                    fileIsPDF = false
-                    fileData = nil
-                    showingFile = true
-                    return
-                }
-                if let str = String(data: data, encoding: .utf8), looksLikeText(str) {
-                    fileText = str
-                    fileIsText = true
-                    fileIsPDF = false
-                    fileData = nil
-                    showingFile = true
-                    return
-                }
-                // Otherwise: unsupported preview, but we still open the sheet so Share is available
-                fileData = data
-                fileIsText = false
-                fileIsPDF = false
-                showingFile = true
-            } else {
-                // No raw URL—fallback minimal info
-                fileText = "(Unable to display file. Try 'Share' → 'Open in…')"
+            // Try text via base64
+            if let enc = file.encoding?.lowercased(), enc == "base64", let b64 = file.content,
+               let data = Data(base64Encoded: b64),
+               let text = String(data: data, encoding: .utf8) {
+                fileText = text
                 fileData = nil
                 fileIsText = true
-                fileIsPDF = false
+                showingFile = true
+                return
+            }
+
+            // Not text (or failed to decode) → raw
+            if let rawURL = fileDownloadURL {
+                let data = try await GHService.fetchRaw(url: rawURL)
+                fileData = data
+                fileIsText = isProbablyText(data) == true ? true : false
+                if fileIsText, let text = String(data: data, encoding: .utf8) {
+                    fileText = text
+                    fileData = nil
+                }
+                showingFile = true
+            } else {
+                fileText = "(Unable to display file. Try 'Open Raw'.)"
+                fileData = nil
+                fileIsText = true
                 showingFile = true
             }
         } catch {
@@ -400,7 +328,6 @@ struct GitHubBrowserView: View {
             fileText = "Failed to load file."
             fileData = nil
             fileIsText = true
-            fileIsPDF = false
             showingFile = true
         }
     }
@@ -413,7 +340,38 @@ struct GitHubBrowserView: View {
         Task { await reloadCurrentFolder() }
     }
 
-    // MARK: - Parsing
+    // MARK: - Per-job recents (@AppStorage JSON)
+
+    private func loadRecents() {
+        recentRepos = decodeRecent(recentReposJSON)
+    }
+
+    private func pushRecent(url: String) {
+        var arr = decodeRecent(recentReposJSON)
+        // Remove duplicates (move to front, case-insensitive)
+        arr.removeAll { $0.caseInsensitiveCompare(url) == .orderedSame }
+        arr.insert(url, at: 0)
+        // Cap
+        if arr.count > maxRecents {
+            arr = Array(arr.prefix(maxRecents))
+        }
+        recentRepos = arr
+        recentReposJSON = encodeRecent(arr)
+    }
+
+    private func decodeRecent(_ json: String) -> [String] {
+        guard let data = json.data(using: .utf8),
+              let arr = try? JSONDecoder().decode([String].self, from: data) else {
+            return []
+        }
+        return arr
+    }
+
+    private func encodeRecent(_ arr: [String]) -> String {
+        (try? String(data: JSONEncoder().encode(arr), encoding: .utf8)) ?? "[]"
+    }
+
+    // MARK: - Parsing / helpers
 
     /// Accepts: https://github.com/<owner>/<repo>
     /// Also accepts: https://github.com/<owner>/<repo>/tree/<branch>/<optional/path...>
@@ -429,43 +387,36 @@ struct GitHubBrowserView: View {
             let extraPath = parts.dropFirst(4).joined(separator: "/")
             return RepoRef(owner: owner, name: name, branch: branch, initialPath: extraPath.isEmpty ? nil : extraPath)
         }
-
         return RepoRef(owner: owner, name: name, branch: nil, initialPath: nil)
     }
 
-    // MARK: - Recents (persist last 3)
-
-    private func loadRecents() -> [SavedRepo] {
-        guard let data = recentJSON.data(using: .utf8) else { return [] }
-        return (try? JSONDecoder().decode([SavedRepo].self, from: data)) ?? []
-    }
-
-    private func persistRecents(_ arr: [SavedRepo]) {
-        guard let data = try? JSONEncoder().encode(arr),
-              let str = String(data: data, encoding: .utf8) else { return }
-        recentJSON = str
-    }
-
-    private func saveRecent(url raw: String) {
-        let norm = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        var arr = loadRecents()
-        if let idx = arr.firstIndex(where: { $0.url == norm }) {
-            arr[idx].savedAt = Date()
-        } else {
-            arr.append(SavedRepo(url: norm, savedAt: Date()))
+    private func shortLabel(for urlString: String) -> String {
+        guard let url = URL(string: urlString) else { return urlString }
+        let comps = url.path.split(separator: "/").map(String.init)
+        if comps.count >= 2 {
+            return "\(comps[0])/\(comps[1])"
         }
-        // Keep newest first; limit to 5
-        arr.sort { $0.savedAt > $1.savedAt }
-        if arr.count > 5 { arr = Array(arr.prefix(5)) }
-        persistRecents(arr)
-        recents = arr
+        return urlString.replacingOccurrences(of: "https://", with: "")
     }
 
-    private func prettyName(for urlStr: String) -> String {
-        if let r = parseRepoURL(urlStr) {
-            return "\(r.owner)/\(r.name)"
+    private func iconName(for item: ContentItem) -> String {
+        if item.type == "dir" { return "folder" }
+        let ext = (item.name as NSString).pathExtension.lowercased()
+        switch ext {
+        case "md": return "doc.text"
+        case "json", "yml", "yaml", "xml", "plist": return "curlybraces.square"
+        case "swift", "m", "mm", "h", "cpp", "c", "js", "ts", "java", "kt", "py", "rb", "go", "rs", "php":
+            return "chevron.left.slash.chevron.right"
+        case "png", "jpg", "jpeg", "gif", "webp", "bmp", "heic": return "photo"
+        case "pdf": return "doc.richtext"
+        default: return "doc"
         }
-        return urlStr
+    }
+
+    private func isProbablyText(_ data: Data) -> Bool {
+        // Heuristic: if it decodes as UTF-8 without nils, treat as text
+        if let _ = String(data: data, encoding: .utf8) { return true }
+        return false
     }
 
     // MARK: - File Preview
@@ -475,32 +426,29 @@ struct GitHubBrowserView: View {
         NavigationStack {
             Group {
                 if fileIsText {
-                    // Markdown: render nicely when possible
-                    if fileExt == "md", let attributed = try? AttributedString(markdown: fileText) {
-                        ScrollView {
-                            Text(attributed)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding()
-                        }
-                    } else {
-                        ScrollView {
-                            Text(fileText)
-                                .font(.system(.body, design: .monospaced))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding()
-                        }
+                    ScrollView {
+                        Text(fileText)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
                     }
-                } else if fileIsPDF, let data = fileData {
-                    PDFKitView(data: data) // inline PDF viewer
                 } else if let data = fileData,
                           let image = UIImage(data: data),
                           let cgImage = image.cgImage {
-                    // Image preview (PNG/JPEG/GIF-first frame)
                     Image(uiImage: UIImage(cgImage: cgImage))
                         .resizable()
                         .scaledToFit()
                         .padding()
                         .background(Color.black.opacity(0.05))
+                } else if let _ = fileData {
+                    VStack(spacing: 12) {
+                        Image(systemName: "doc")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("Preview not supported")
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding()
                 } else {
                     VStack(spacing: 12) {
                         Image(systemName: "doc")
@@ -522,63 +470,40 @@ struct GitHubBrowserView: View {
                         ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
                     } else if fileIsText {
                         ShareLink(item: fileText) { Image(systemName: "square.and.arrow.up") }
-                    } else if let data = fileData {
-                        // Share raw data via temporary file
-                        let tmpURL = writeTempFile(named: fileTitle, data: data, ext: fileExt)
-                        if let tmpURL { ShareLink(item: tmpURL) { Image(systemName: "square.and.arrow.up") } }
                     }
                 }
             }
         }
     }
-
-    // MARK: - Helpers (preview type heuristics)
-
-    private func isTextExtension(_ ext: String) -> Bool {
-        let textExts: Set<String> = [
-            "txt","md","markdown","json","yml","yaml","xml","csv",
-            "ini","cfg","conf","log",
-            "html","htm","css","js","ts",
-            "swift","m","mm","h","hpp","c","cpp","kt","java","py","rb","sh","bat","ps1","sql","rs","go","php"
-        ]
-        return textExts.contains(ext)
-    }
-
-    private func isImageExtension(_ ext: String) -> Bool {
-        let imgExts: Set<String> = ["png","jpg","jpeg","gif","bmp","tiff","tif","heic","heif","webp"]
-        return imgExts.contains(ext)
-    }
-
-    private func looksLikeText(_ s: String) -> Bool {
-        // crude heuristic—if it has lots of NULs or very low ASCII, probably binary
-        // Here we just say “if it’s decodable and not empty, go with it”
-        return !s.isEmpty
-    }
-
-    private func writeTempFile(named name: String, data: Data, ext: String) -> URL? {
-        let safeName = name.isEmpty ? "file" : name
-        let filename = (safeName as NSString).deletingPathExtension + "." + (ext.isEmpty ? "bin" : ext)
-        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent(filename)
-        do {
-            try data.write(to: url, options: .atomic)
-            return url
-        } catch {
-            return nil
-        }
-    }
 }
 
-// MARK: - PDFKit SwiftUI wrapper
+// MARK: - Simple flow layout for recent chips
 
-fileprivate struct PDFKitView: UIViewRepresentable {
-    let data: Data
-    func makeUIView(context: Context) -> PDFView {
-        let view = PDFView()
-        view.document = PDFDocument(data: data)
-        view.autoScales = true
-        view.displayMode = .singlePageContinuous
-        view.displayDirection = .vertical
-        return view
+fileprivate struct FlowLayout<Content: View>: View {
+    var spacing: CGFloat = 8
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+
+        return GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                content
+                    .fixedSize()
+                    .alignmentGuide(.leading) { d in
+                        if abs(width - d.width) > geo.size.width {
+                            width = 0; height -= d.height + spacing
+                        }
+                        let result = width
+                        if d.width != 0 { width -= d.width + spacing }
+                        return result
+                    }
+                    .alignmentGuide(.top) { _ in
+                        let result = height
+                        return result
+                    }
+            }
+        }.frame(height: 0) // container expands via its parent VStack/HStack
     }
-    func updateUIView(_ uiView: PDFView, context: Context) { }
 }
