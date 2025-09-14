@@ -224,7 +224,7 @@ struct NotesTabView: View {
 
     @ViewBuilder
     private func tileBackground(tint: Color, radius: CGFloat) -> some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             ZStack {
                 Color.clear
                     .glassEffect(.regular.tint(tint.opacity(0.55)),

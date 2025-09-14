@@ -279,7 +279,7 @@ struct MindMapTabView: View {
     }
 
     @ViewBuilder private var controlsBackground: some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .capsule)
         } else {
             Capsule().fill(.ultraThinMaterial)
@@ -287,7 +287,7 @@ struct MindMapTabView: View {
     }
 
     @ViewBuilder private var topButtonBackground: some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .capsule)
         } else {
             Capsule().fill(.ultraThinMaterial)
@@ -624,7 +624,7 @@ private struct AutoArrangeConfirmPanel: View {
 
     @ViewBuilder
     private var panelBackground: some View {
-        if #available(iOS 18.0, *), isBeta {
+        if #available(iOS 26.0, *), isBeta {
             ZStack {
                 Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 20))
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -703,7 +703,7 @@ private struct NodeBubble: View {
 
     @ViewBuilder
     private func nodeBackground(tint: Color) -> some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             ZStack {
                 Color.clear
                     .glassEffect(.regular.tint(tint.opacity(0.5)),
@@ -792,7 +792,7 @@ private struct NodeBubbleSnapshot: View {
 
     @ViewBuilder
     private func nodeBackground(tint: Color) -> some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             ZStack {
                 Color.clear
                     .glassEffect(.regular.tint(tint.opacity(0.5)),

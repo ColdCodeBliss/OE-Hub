@@ -133,7 +133,7 @@ struct NoteEditorPanel: View {
 
     @ViewBuilder
     private var panelBackground: some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 20))
         } else {
             RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
@@ -142,7 +142,7 @@ struct NoteEditorPanel: View {
 
     @ViewBuilder
     private func innerCardBackground(corner: CGFloat) -> some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.clear, in: .rect(cornerRadius: corner))
         } else {
             RoundedRectangle(cornerRadius: corner).fill(.ultraThinMaterial)

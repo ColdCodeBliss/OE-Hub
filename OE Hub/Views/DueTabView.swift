@@ -381,7 +381,7 @@ struct DueTabView: View {
 
     @ViewBuilder
     private func rowBackground(tint: Color, radius: CGFloat) -> some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             // Real Liquid Glass (iOS 18+): glass bubble with gentle highlight
             ZStack {
                 Color.clear
@@ -514,7 +514,7 @@ private struct CompletedDeliverablesPanel: View {
     // Panel backgrounds
     @ViewBuilder
     private var panelBackground: some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             ZStack {
                 Color.clear
                     .glassEffect(.regular, in: .rect(cornerRadius: 20))
@@ -535,7 +535,7 @@ private struct CompletedDeliverablesPanel: View {
 
     @ViewBuilder
     private var closeBackground: some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .circle)
         } else {
             Circle().fill(.ultraThinMaterial)
@@ -545,7 +545,7 @@ private struct CompletedDeliverablesPanel: View {
     // Row backgrounds inside the panel
     @ViewBuilder
     private func rowBackgroundPanel(tint: Color, radius: CGFloat) -> some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             ZStack {
                 Color.clear
                     .glassEffect(.regular.tint(tint.opacity(0.5)), in: .rect(cornerRadius: radius))

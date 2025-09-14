@@ -65,7 +65,7 @@ struct SettingsPanel: View {
                                     )
                                 )
 
-                                if #available(iOS 18.0, *) {
+                                if #available(iOS 26.0, *) {
                                     Toggle("Liquid Glass (Beta, iOS 18+)", isOn:
                                         Binding(
                                             get: { isBetaGlassEnabled },
@@ -95,7 +95,7 @@ struct SettingsPanel: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Link("Contact Support", destination: URL(string: "mailto:support@workforge.app")!)
 
-                                if #available(iOS 18.0, *), isBetaGlassEnabled {
+                                if #available(iOS 26.0, *), isBetaGlassEnabled {
                                     Button("Donate") { showDonateSheet = true }
                                         .buttonStyle(.glass)
                                 } else if isLiquidGlassEnabled {
@@ -152,7 +152,7 @@ struct SettingsPanel: View {
     // Panel (outer) background: true Liquid Glass when available, else material
     @ViewBuilder
     private var panelBackground: some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 20))
         } else if isLiquidGlassEnabled {
             RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
@@ -165,7 +165,7 @@ struct SettingsPanel: View {
     // Inner card background
     @ViewBuilder
     private var cardBackground: some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.clear, in: .rect(cornerRadius: 14))
         } else if isLiquidGlassEnabled {
             RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)

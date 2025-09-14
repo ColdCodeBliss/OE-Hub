@@ -9,7 +9,7 @@ struct SettingsView: View {
 
     // Convenience flags
     private var useBetaGlass: Bool {
-        if #available(iOS 18.0, *) { return isBetaGlassEnabled }
+        if #available(iOS 26.0, *) { return isBetaGlassEnabled }
         return false
     }
     private var useClassicGlass: Bool { isLiquidGlassEnabled && !useBetaGlass }
@@ -38,7 +38,7 @@ struct SettingsView: View {
                         )
 
                         // Real Liquid Glass (iOS 18+), mutually exclusive with Classic
-                        if #available(iOS 18.0, *) {
+                        if #available(iOS 26.0, *) {
                             Toggle("Liquid Glass (Beta, iOS 18+)", isOn:
                                 Binding(
                                     get: { isBetaGlassEnabled },
@@ -62,7 +62,7 @@ struct SettingsView: View {
 
                         Link("Contact Support", destination: URL(string: "mailto:support@workforge.app")!)
 
-                        if #available(iOS 18.0, *), useBetaGlass {
+                        if #available(iOS 26.0, *), useBetaGlass {
                             Button("Donate") { showDonateSheet = true }
                                 .buttonStyle(.glass)
                         } else if useClassicGlass {
@@ -134,7 +134,7 @@ private struct SectionCard<Content: View>: View {
 
     @ViewBuilder
     private var cardBackground: some View {
-        if #available(iOS 18.0, *), useBetaGlass {
+        if #available(iOS 26.0, *), useBetaGlass {
             // ✅ Real Liquid Glass
             Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 16))
         } else if useClassicGlass {
