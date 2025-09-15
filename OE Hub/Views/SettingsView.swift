@@ -3,7 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic (fallback)
-    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real Liquid Glass (iOS 18+)
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real Liquid Glass (iOS 26+)
 
     @State private var showDonateSheet = false
 
@@ -37,9 +37,9 @@ struct SettingsView: View {
                             )
                         )
 
-                        // Real Liquid Glass (iOS 18+), mutually exclusive with Classic
+                        // Real Liquid Glass (iOS 26+), mutually exclusive with Classic
                         if #available(iOS 26.0, *) {
-                            Toggle("Liquid Glass (Beta, iOS 18+)", isOn:
+                            Toggle("Liquid Glass (Beta, iOS 26+)", isOn:
                                 Binding(
                                     get: { isBetaGlassEnabled },
                                     set: { newValue in
@@ -49,7 +49,7 @@ struct SettingsView: View {
                                 )
                             )
                         } else {
-                            Toggle("Liquid Glass (Beta, iOS 20+)", isOn: .constant(false))
+                            Toggle("Liquid Glass (Beta, iOS 26+)", isOn: .constant(false))
                                 .disabled(true)
                                 .foregroundStyle(.secondary)
                         }
