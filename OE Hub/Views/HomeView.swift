@@ -45,7 +45,7 @@ struct HomeView: View {
             let topInset = geo.safeAreaInsets.top
             let isDynamicIsland = topInset >= 54
             let logoYOffset: CGFloat = isDynamicIsland ? -88 : -70
-            let listGapBelowLogo: CGFloat = isDynamicIsland ? -38 : -35
+            let listGapBelowLogo: CGFloat = isDynamicIsland ? -38 : -28
 
             NavigationStack {
                 VStack {

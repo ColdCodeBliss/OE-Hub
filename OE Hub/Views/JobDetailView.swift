@@ -33,33 +33,16 @@ struct JobDetailView: View {
             .sheet(isPresented: $showGitHubBrowser) {
                 GitHubBrowserView(recentKey: "recentRepos.\(job.repoBucketKey)")
             }
-            // Confluence placeholder (we’ll replace with real browser later)
+            
+        // Confluence links (per-job key; up to 5)
             .sheet(isPresented: $showConfluenceSheet) {
-                NavigationStack {
-                    VStack(spacing: 16) {
-                        Image("Confluence_icon")
-                            .renderingMode(.original)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 56, height: 56)
-                        Text("Confluence integration")
-                            .font(.headline)
-                        Text("We’ll hook this up next. For now, this is a placeholder screen.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    .padding()
-                    .navigationTitle("Confluence")
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") { showConfluenceSheet = false }
-                        }
-                    }
-                }
+                ConfluenceLinksView(
+                    storageKey: "confluenceLinks.\(job.repoBucketKey)",
+                    maxLinks: 5
+                )
             }
-    }
+
+        }
 
     // MARK: - Split main content
 

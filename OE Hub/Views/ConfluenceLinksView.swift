@@ -1,3 +1,11 @@
+//
+//  ConfluenceLinksView.swift
+//  OE Hub
+//
+//  Created by Ryan Bliss on 9/14/25.
+//
+
+
 import SwiftUI
 
 struct ConfluenceLinksView: View {
