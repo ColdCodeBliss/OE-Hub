@@ -16,8 +16,9 @@ struct JobDetailView: View {
     @State private var addNoteTrigger: Int = 0
     @State private var addChecklistTrigger: Int = 0
 
-    // GitHub browser sheet flag
+    // Sheets
     @State private var showGitHubBrowser: Bool = false
+    @State private var showConfluenceSheet: Bool = false   // ← NEW
 
     var job: Job
 
@@ -28,12 +29,20 @@ struct JobDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { trailingButton }
             }
-            // Present the GitHub browser (namespaced by this Job’s key)
+            // GitHub browser (namespaced by this Job’s key)
             .sheet(isPresented: $showGitHubBrowser) {
-                // ✅ Use the same per-job key everywhere
                 GitHubBrowserView(recentKey: "recentRepos.\(job.repoBucketKey)")
             }
-    }
+            
+        // Confluence links (per-job key; up to 5)
+            .sheet(isPresented: $showConfluenceSheet) {
+                ConfluenceLinksView(
+                    storageKey: "confluenceLinks.\(job.repoBucketKey)",
+                    maxLinks: 5
+                )
+            }
+
+        }
 
     // MARK: - Split main content
 
@@ -93,7 +102,7 @@ struct JobDetailView: View {
             .tag(DetailTab.info)
     }
 
-    // MARK: - Trailing toolbar button
+    // MARK: - Trailing toolbar button(s)
 
     @ViewBuilder
     private var trailingButton: some View {
@@ -101,21 +110,37 @@ struct JobDetailView: View {
         case .due:
             Button("Add Deliverable", systemImage: "plus") { addDeliverableTrigger &+= 1 }
                 .accessibilityLabel("Add Deliverable")
+
         case .notes:
             Button("Add Note", systemImage: "plus") { addNoteTrigger &+= 1 }
                 .accessibilityLabel("Add Note")
+
         case .checklist:
             Button("Add Item", systemImage: "plus") { addChecklistTrigger &+= 1 }
                 .accessibilityLabel("Add Checklist Item")
+
         case .info:
-            Button(action: { showGitHubBrowser = true }) {
-                Image("github")
-                    .renderingMode(.original)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22)
-                    .accessibilityLabel("Open GitHub Browser")
+            // Confluence (left) + GitHub (right)
+            HStack(spacing: 14) {
+                Button(action: { showConfluenceSheet = true }) {
+                    Image("Confluence_icon")
+                        .renderingMode(.original)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .accessibilityLabel("Open Confluence")
+                }
+
+                Button(action: { showGitHubBrowser = true }) {
+                    Image("github")
+                        .renderingMode(.original)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 22, height: 22)
+                        .accessibilityLabel("Open GitHub Browser")
+                }
             }
+
         default:
             EmptyView()
         }

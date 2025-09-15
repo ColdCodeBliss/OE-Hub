@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UIKit
 
 struct NotesTabView: View {
     @Environment(\.modelContext) private var modelContext
@@ -17,7 +18,6 @@ struct NotesTabView: View {
 
     // Color picker state
     @State private var editingColorIndex: Int = 0
-    
 
     // Style toggles
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
@@ -32,18 +32,22 @@ struct NotesTabView: View {
     private let colors: [Color] = [.red, .blue, .green, .orange, .yellow, .purple, .brown, .teal]
     private let gridColumns: [GridItem] = [GridItem(.flexible()), GridItem(.flexible())]
 
+    // Bullet configuration (shared with Beta panel)
+    private let bulletPrefix: String = "•\t"
+    private let bulletIndent: CGFloat = 24
+
+    // Adds headroom beneath the inline toolbar title in the sheet
+    private let navBuffer: CGFloat = 50
+
     private var sortedNotes: [Note] {
-        let notes: [Note] = job.notes
-        return notes.sorted { (a: Note, b: Note) in a.creationDate > b.creationDate }
+        job.notes.sorted { $0.creationDate > $1.creationDate }
     }
 
     private var nextColorIndex: Int {
-        let used: Set<Int> = Set(job.notes.map { $0.colorIndex })
-        for i in 0..<colors.count { if !used.contains(i) { return i } }
+        let used = Set(job.notes.map { $0.colorIndex })
+        for i in 0..<colors.count where !used.contains(i) { return i }
         return job.notes.count % colors.count
     }
-
-    // MARK: - View
 
     var body: some View {
         ScrollView {
@@ -61,9 +65,8 @@ struct NotesTabView: View {
 
     @ViewBuilder
     private func makeGrid(notes: [Note]) -> some View {
-        let columns: [GridItem] = gridColumns
-        LazyVGrid(columns: columns, spacing: 12) {
-            ForEach(notes) { (note: Note) in
+        LazyVGrid(columns: gridColumns, spacing: 12) {
+            ForEach(notes) { note in
                 noteTile(for: note)
                     .onTapGesture { openEditor(for: note) }
             }
@@ -77,7 +80,7 @@ struct NotesTabView: View {
         )
     }
 
-    // Non-Beta rich-text sheet editor
+    // MARK: - Non-Beta rich-text sheet editor (small inline title + Done + top inset)
     @ViewBuilder
     private var nonBetaSheet: some View {
         NavigationStack {
@@ -87,10 +90,22 @@ struct NotesTabView: View {
                     .textFieldStyle(.roundedBorder)
                     .padding(.horizontal)
 
+                // Formatting toolbar
+                HStack(spacing: 10) {
+                    formatButton(system: "bold", label: "Bold") { nb_toggleBold() }
+                    formatButton(system: "underline", label: "Underline") { nb_toggleUnderline() }
+                    formatButton(system: "strikethrough", label: "Strikethrough") { nb_toggleStrikethrough() }
+                    formatButton(system: "list.bullet", label: "Bulleted List") { nb_insertBulletedList() }
+                    Spacer()
+                }
+                .padding(.horizontal)
+
                 // Rich text editor (UIKit-backed)
                 RichTextEditorKit(
-                    attributedText: $editingAttributed,      // ← label fixed
-                    selectedRange: $selectionRange           // make sure this @State exists
+                    attributedText: $editingAttributed,
+                    selectedRange: $selectionRange,
+                    bulletPrefix: bulletPrefix,
+                    bulletIndent: bulletIndent
                 )
                 .frame(minHeight: 220)
                 .padding(8)
@@ -100,7 +115,7 @@ struct NotesTabView: View {
 
                 // Color
                 Picker("Color", selection: $editingColorIndex) {
-                    ForEach(0..<colors.count, id: \.self) { (index: Int) in
+                    ForEach(0..<colors.count, id: \.self) { index in
                         Text(colorName(for: index)).tag(index)
                     }
                 }
@@ -125,10 +140,9 @@ struct NotesTabView: View {
                         editingAttributed.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
 
-                    // 🔥 Delete only when editing an existing note
                     if selectedNote != nil {
                         Button {
-                            deleteCurrentNote()               // ensure this helper exists in the view
+                            deleteCurrentNote()
                         } label: {
                             Image(systemName: "trash")
                                 .font(.system(size: 16, weight: .semibold))
@@ -146,17 +160,28 @@ struct NotesTabView: View {
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal)
-            .navigationTitle(selectedNote != nil ? "Edit Note" : "New Note")
+            // Small inline title to the left; Done to the right
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Text(selectedNote != nil ? "Edit Note" : "New Note")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismissEditor() }
                 }
             }
+            .navigationBarTitleDisplayMode(.inline)
+            // Reserve headroom below toolbar so subject line never hides behind it
+            .safeAreaInset(edge: .top) {
+                Color.clear.frame(height: navBuffer)
+            }
+            // Nice keyboard behavior
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
-
-    // ✅ Beta glass floating panel editor — fixed to use attributed text
+    // MARK: - Beta overlay (unchanged)
     @ViewBuilder
     private var betaOverlay: some View {
         if (isAddingNote || isEditingNote) && isBetaGlassEnabled {
@@ -167,15 +192,12 @@ struct NotesTabView: View {
                 ),
                 title: (selectedNote != nil ? "Edit Note" : "New Note"),
                 summary: $newNoteSummary,
-                attributedText: $editingAttributed,     // rich text binding
+                attributedText: $editingAttributed,
                 colors: colors,
                 colorIndex: $editingColorIndex,
                 onCancel: { dismissEditor() },
-                onSave: {
-                    saveNote(attributed: editingAttributed)          // persist rich text
-                },
+                onSave: { saveNote(attributed: editingAttributed) },
                 onDelete: (selectedNote == nil ? nil : {
-                    // Delete only available when editing an existing note
                     guard let note = selectedNote else { return }
                     if let idx = job.notes.firstIndex(of: note) {
                         job.notes.remove(at: idx)
@@ -191,14 +213,13 @@ struct NotesTabView: View {
         }
     }
 
-
     // MARK: - Tiles
 
     private func noteTile(for note: Note) -> some View {
-        let idx: Int = safeIndex(note.colorIndex)
-        let tint: Color = colors[idx]
+        let idx = safeIndex(note.colorIndex)
+        let tint = colors[idx]
         let fg: Color = .black
-        let isGlass: Bool = (isLiquidGlassEnabled || isBetaGlassEnabled)
+        let isGlass = (isLiquidGlassEnabled || isBetaGlassEnabled)
         let radius: CGFloat = 16
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -224,11 +245,10 @@ struct NotesTabView: View {
 
     @ViewBuilder
     private func tileBackground(tint: Color, radius: CGFloat) -> some View {
-        if #available(iOS 18.0, *), isBetaGlassEnabled {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
             ZStack {
                 Color.clear
-                    .glassEffect(.regular.tint(tint.opacity(0.55)),
-                                 in: .rect(cornerRadius: radius))
+                    .glassEffect(.regular.tint(tint.opacity(0.55)), in: .rect(cornerRadius: radius))
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
                     .fill(
                         LinearGradient(
@@ -242,19 +262,18 @@ struct NotesTabView: View {
         } else if isLiquidGlassEnabled {
             RoundedRectangle(cornerRadius: radius, style: .continuous)
                 .fill(.ultraThinMaterial)
-                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(tint.opacity(0.55)))
+                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(tint.opacity(0.55)))
                 .overlay(
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
                         .fill(LinearGradient(
                             colors: [Color.white.opacity(0.18), .clear],
                             startPoint: .topTrailing,
-                            endPoint: .bottomLeading))
+                            endPoint: .bottomLeading
+                        ))
                         .blendMode(.plusLighter)
                 )
         } else {
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(tint.gradient)
+            RoundedRectangle(cornerRadius: radius, style: .continuous).fill(tint.gradient)
         }
     }
 
@@ -278,50 +297,37 @@ struct NotesTabView: View {
         isAddingNote = true
     }
 
-    /// Save helper. If `attributed` is provided, persist full rich text via `Note.attributed`.
     private func saveNote(attributed: NSAttributedString?) {
-        let trimmedSummary: String = newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines)
-        let plainBody: String = (attributed?.string ?? newNoteContent)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSummary = newNoteSummary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let plainBody = (attributed?.string ?? newNoteContent).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedSummary.isEmpty, !plainBody.isEmpty else { return }
 
         if let note = selectedNote {
             note.summary = trimmedSummary
             note.colorIndex = safeIndex(editingColorIndex)
-            if let rich = attributed {
-                note.attributed = rich
-            } else {
-                note.content = plainBody
-            }
+            if let rich = attributed { note.attributed = rich } else { note.content = plainBody }
         } else {
             let idx = safeIndex(editingColorIndex)
             let new = Note(content: plainBody, summary: trimmedSummary, colorIndex: idx)
-            if let rich = attributed {
-                new.attributed = rich
-            }
+            if let rich = attributed { new.attributed = rich }
             job.notes.append(new)
         }
 
         try? modelContext.save()
         dismissEditor()
     }
-    
-    // Helper - Permanently delete the note currently being edited
+
     private func deleteCurrentNote() {
         guard let note = selectedNote else { return }
-
         if let idx = job.notes.firstIndex(of: note) {
-            let removed = job.notes.remove(at: idx)   // unlink from the job
-            modelContext.delete(removed)              // permanently delete
+            let removed = job.notes.remove(at: idx)
+            modelContext.delete(removed)
         } else {
-            // Fallback: if it wasn't in the array (edge case), still try to delete it
             modelContext.delete(note)
         }
-
         try? modelContext.save()
-        dismissEditor()                               // resets editor state & selectedNote
+        dismissEditor()
     }
-
 
     private func dismissEditor() {
         isAddingNote = false
@@ -333,7 +339,102 @@ struct NotesTabView: View {
         editingAttributed = NSAttributedString(string: "")
     }
 
-    // MARK: - Helpers
+    // MARK: - Formatting helpers (non-Beta)
+
+    private func formatButton(system: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(width: 34, height: 34)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func nb_normalizedSelection() -> NSRange {
+        var r = selectionRange
+        if r.location == NSNotFound { r = NSRange(location: 0, length: 0) }
+        if r.length == 0 {
+            let ns = editingAttributed.string as NSString
+            r = ns.paragraphRange(for: r)
+        }
+        let maxLen = max(0, editingAttributed.length)
+        let loc = min(max(0, r.location), maxLen)
+        let len = min(max(0, r.length), maxLen - loc)
+        return NSRange(location: loc, length: len)
+    }
+
+    private func nb_toggleBold() {
+        guard editingAttributed.length > 0 else { return }
+        let range = nb_normalizedSelection()
+        let m = NSMutableAttributedString(attributedString: editingAttributed)
+        m.enumerateAttribute(.font, in: range, options: []) { value, subRange, _ in
+            let base = (value as? UIFont) ?? UIFont.preferredFont(forTextStyle: .body)
+            let traits = base.fontDescriptor.symbolicTraits
+            let hasBold = traits.contains(.traitBold)
+            let newDesc = base.fontDescriptor.withSymbolicTraits(hasBold ? traits.subtracting(.traitBold) : traits.union(.traitBold))
+            let newFont = newDesc.flatMap { UIFont(descriptor: $0, size: base.pointSize) } ?? base
+            m.addAttribute(.font, value: newFont, range: subRange)
+        }
+        editingAttributed = m
+    }
+
+    private func nb_toggleUnderline() {
+        guard editingAttributed.length > 0 else { return }
+        let range = nb_normalizedSelection()
+        let m = NSMutableAttributedString(attributedString: editingAttributed)
+        m.enumerateAttribute(.underlineStyle, in: range, options: []) { value, subRange, _ in
+            let isOn = (value as? Int ?? 0) != 0
+            if isOn { m.removeAttribute(.underlineStyle, range: subRange) }
+            else { m.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: subRange) }
+        }
+        editingAttributed = m
+    }
+
+    private func nb_toggleStrikethrough() {
+        guard editingAttributed.length > 0 else { return }
+        let range = nb_normalizedSelection()
+        let m = NSMutableAttributedString(attributedString: editingAttributed)
+        m.enumerateAttribute(.strikethroughStyle, in: range, options: []) { value, subRange, _ in
+            let isOn = (value as? Int ?? 0) != 0
+            if isOn { m.removeAttribute(.strikethroughStyle, range: subRange) }
+            else { m.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: subRange) }
+        }
+        editingAttributed = m
+    }
+
+    private func nb_insertBulletedList() {
+        let ns = editingAttributed.string as NSString
+        let pr = ns.paragraphRange(for: nb_normalizedSelection())
+        let m = NSMutableAttributedString(attributedString: editingAttributed)
+
+        var cursor = pr.location
+        while cursor < pr.location + pr.length {
+            let lineRange = ns.lineRange(for: NSRange(location: cursor, length: 0))
+            let attrs = m.attributes(at: lineRange.location, effectiveRange: nil)
+            let lineText = (m.string as NSString).substring(with: lineRange)
+            let already = lineText.hasPrefix(bulletPrefix)
+
+            if !already {
+                let bullet = NSMutableAttributedString(string: bulletPrefix, attributes: attrs)
+                let ps = (attrs[.paragraphStyle] as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+                ps.tabStops = [NSTextTab(textAlignment: .left, location: bulletIndent)]
+                ps.defaultTabInterval = bulletIndent
+                ps.headIndent = bulletIndent
+                ps.firstLineHeadIndent = 0
+                bullet.addAttribute(.paragraphStyle, value: ps, range: NSRange(location: 0, length: bullet.length))
+                m.insert(bullet, at: lineRange.location)
+                cursor = lineRange.location + bullet.length + lineRange.length
+            } else {
+                cursor = lineRange.location + lineRange.length
+            }
+        }
+        editingAttributed = m
+    }
+
+    // MARK: - Misc helpers
 
     private func colorName(for index: Int) -> String {
         switch safeIndex(index) {

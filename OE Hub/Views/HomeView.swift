@@ -21,16 +21,11 @@ struct HomeView: View {
     @State private var showSettings = false
     @State private var navJob: Job? = nil
 
-
-
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
     private let heroLogoHeight: CGFloat = 120   // logo size
     private let heroTopOffset: CGFloat = 0      // distance from button row
-    
-    private let logoYOffset: CGFloat = -84      // negative lifts the logo closer to the buttons
-    private let listGapBelowLogo: CGFloat = -38 // tiny space between logo and first card
 
     // MARK: - Init: move #Predicate here (reduces compiler load)
     init() {
@@ -45,79 +40,86 @@ struct HomeView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            VStack {
-                jobList
-                jobHistoryButton
-            }
-            // Push content down just enough so it sits under the overlayed logo
-            .padding(.top, max(0, heroLogoHeight + heroTopOffset + listGapBelowLogo + logoYOffset))
+        GeometryReader { geo in
+            // Detect “Dynamic Island” style top inset (≈ 54pt+ on iPhone 14 Pro/15 family)
+            let topInset = geo.safeAreaInsets.top
+            let isDynamicIsland = topInset >= 54
+            let logoYOffset: CGFloat = isDynamicIsland ? -88 : -70
+            let listGapBelowLogo: CGFloat = isDynamicIsland ? -38 : -28
 
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { toolbarContent }
-            .navigationDestination(isPresented: Binding(
-                get: { navJob != nil },
-                set: { if !$0 { navJob = nil } }
-            )) {
-                if let job = navJob {
-                    JobDetailView(job: job)
+            NavigationStack {
+                VStack {
+                    jobList
+                    jobHistoryButton
+                }
+                // Push content down just enough so it sits under the overlayed logo
+                .padding(.top, max(0, heroLogoHeight + heroTopOffset + listGapBelowLogo + logoYOffset))
+
+                .navigationTitle("")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { toolbarContent }
+                .navigationDestination(isPresented: Binding(
+                    get: { navJob != nil },
+                    set: { if !$0 { navJob = nil } }
+                )) {
+                    if let job = navJob {
+                        JobDetailView(job: job)
+                    }
+                }
+
+                // Draw the logo on top (doesn't take layout space)
+                .overlay(alignment: .top) {
+                    HeroLogoRow(height: heroLogoHeight)
+                        .padding(.top, heroTopOffset)   // distance from button row
+                        .padding(.horizontal, 16)
+                        .offset(y: logoYOffset)         // lift the logo up (negative values)
+                        .allowsHitTesting(false)
+                        .zIndex(1)
+                }
+
+                .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
+
+                // sheets & alerts (unchanged except Settings presentation split below)
+                .sheet(isPresented: $showJobHistory) {
+                    JobHistorySheetView(
+                        deletedJobs: deletedJobs,
+                        jobToDeletePermanently: $jobToDeletePermanently,
+                        onDone: { showJobHistory = false }
+                    )
+                }
+
+                // Settings: present as a normal sheet when Beta Glass is OFF
+                .sheet(isPresented: Binding(
+                    get: { showSettings && !isBetaGlassEnabled },
+                    set: { if !$0 { showSettings = false } }
+                )) {
+                    SettingsView()
+                }
+
+                .sheet(isPresented: $showColorPicker) {
+                    ColorPickerView(
+                        selectedItem: selectedItemBinding,
+                        isPresented: $showColorPicker
+                    )
+                    .presentationDetents([.medium])
+                }
+                .alert("Rename Job", isPresented: $isRenaming) { renameAlertButtons }
+                .alert("Confirm Permanent Deletion", isPresented: deletionAlertFlag) {
+                    deletionAlertButtons
+                } message: {
+                    Text("This action cannot be undone.")
+                }
+
+                // Settings: present as a floating glass panel when Beta Glass is ON
+                .overlay {
+                    if showSettings && isBetaGlassEnabled {
+                        SettingsPanel(isPresented: $showSettings)
+                            .zIndex(2) // keep above everything else
+                    }
                 }
             }
-
-
-            // Draw the logo on top (doesn't take layout space)
-            .overlay(alignment: .top) {
-                HeroLogoRow(height: heroLogoHeight)
-                    .padding(.top, heroTopOffset)   // distance from button row
-                    .padding(.horizontal, 16)
-                    .offset(y: logoYOffset)         // lift the logo up (negative values)
-                    .allowsHitTesting(false)
-                    .zIndex(1)
-            }
-
-            .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
-
-            // sheets & alerts (unchanged except Settings presentation split below)
-            .sheet(isPresented: $showJobHistory) {
-                JobHistorySheetView(
-                    deletedJobs: deletedJobs,
-                    jobToDeletePermanently: $jobToDeletePermanently,
-                    onDone: { showJobHistory = false }
-                )
-            }
-
-            // ❗️Settings: present as a normal sheet when Beta Glass is OFF
-            .sheet(isPresented: Binding(
-                get: { showSettings && !isBetaGlassEnabled },
-                set: { if !$0 { showSettings = false } }
-            )) {
-                SettingsView()
-            }
-
-            .sheet(isPresented: $showColorPicker) {
-                ColorPickerView(
-                    selectedItem: selectedItemBinding,
-                    isPresented: $showColorPicker
-                )
-                .presentationDetents([.medium])
-            }
-            .alert("Rename Job", isPresented: $isRenaming) { renameAlertButtons }
-            .alert("Confirm Permanent Deletion", isPresented: deletionAlertFlag) {
-                deletionAlertButtons
-            } message: {
-                Text("This action cannot be undone.")
-            }
-
-            // ❗️Settings: present as a floating glass panel when Beta Glass is ON
-            .overlay {
-                if showSettings && isBetaGlassEnabled {
-                    SettingsPanel(isPresented: $showSettings)
-                        .zIndex(2) // keep above everything else
-                }
-            }
+            .preferredColorScheme(isDarkMode ? .dark : .light)
         }
-        .preferredColorScheme(isDarkMode ? .dark : .light)
     }
 
     // MARK: - Subviews
@@ -126,10 +128,9 @@ struct HomeView: View {
         List {
             ForEach(jobs, id: \.persistentModelID) { (job: Job) in
                 JobRowView(job: job)
-                    .contentShape(Rectangle())                     // full-row tappable
-                    .onTapGesture { navJob = job }                 // <- trigger nav
+                    .contentShape(Rectangle())
+                    .onTapGesture { navJob = job }
 
-                    // keep your swipe actions
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         Button { startRenaming(job) } label: {
                             Label("Rename", systemImage: "pencil")
@@ -157,7 +158,6 @@ struct HomeView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
     }
-
 
     @ViewBuilder
     private var jobHistoryButton: some View {
@@ -239,7 +239,6 @@ struct HomeView: View {
             set: { newValue in
                 if let job = newValue as? Job {
                     selectedJob = job
-                    // "Ping" change to refresh views that read colorCode.
                     job.colorCode = job.colorCode
                     try? modelContext.save()
                 } else {
