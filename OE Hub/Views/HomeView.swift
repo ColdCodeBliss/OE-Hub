@@ -7,6 +7,7 @@ struct HomeView: View {
     @Query private var deletedJobs: [Job]
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.horizontalSizeClass) private var hSize
 
     // UI State
     @State private var isRenaming = false
@@ -16,14 +17,21 @@ struct HomeView: View {
     @State private var showJobHistory = false
     @State private var jobToDeletePermanently: Job?
 
+    // iPhone-style push navigation
+    @State private var navJob: Job? = nil
+
+    // iPad-style sidebar selection (Hashable)
+    @State private var splitSelectionID: PersistentIdentifier? = nil
+
+    // Color picker & settings
     @State private var selectedJob: Job?
     @State private var showColorPicker = false
     @State private var showSettings = false
-    @State private var navJob: Job? = nil
 
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
+    // Existing hero metrics (used on iPhone flow only)
     private let heroLogoHeight: CGFloat = 120   // logo size
     private let heroTopOffset: CGFloat = 0      // distance from button row
 
@@ -40,8 +48,21 @@ struct HomeView: View {
     }
 
     var body: some View {
+        // Branch by size class: regular = iPad (split), compact = iPhone (existing flow)
+        if hSize == .regular {
+            iPadSplitView
+                .preferredColorScheme(isDarkMode ? .dark : .light)
+        } else {
+            iPhoneStackView
+                .preferredColorScheme(isDarkMode ? .dark : .light)
+        }
+    }
+
+    // MARK: - iPhone (existing NavigationStack flow, unchanged layout/overlays)
+
+    private var iPhoneStackView: some View {
         GeometryReader { geo in
-            // Detect “Dynamic Island” style top inset (≈ 54pt+ on iPhone 14 Pro/15 family)
+            // Detect “Dynamic Island” style top inset (≈54pt+ on 14 Pro/15 family)
             let topInset = geo.safeAreaInsets.top
             let isDynamicIsland = topInset >= 54
             let logoYOffset: CGFloat = isDynamicIsland ? -88 : -70
@@ -49,10 +70,10 @@ struct HomeView: View {
 
             NavigationStack {
                 VStack {
-                    jobList
+                    jobList               // same list as before
                     jobHistoryButton
                 }
-                // Push content down just enough so it sits under the overlayed logo
+                // Push content down to sit under the overlayed logo
                 .padding(.top, max(0, heroLogoHeight + heroTopOffset + listGapBelowLogo + logoYOffset))
 
                 .navigationTitle("")
@@ -67,19 +88,19 @@ struct HomeView: View {
                     }
                 }
 
-                // Draw the logo on top (doesn't take layout space)
+                // Overlay hero logo (iPhone only)
                 .overlay(alignment: .top) {
                     HeroLogoRow(height: heroLogoHeight)
-                        .padding(.top, heroTopOffset)   // distance from button row
+                        .padding(.top, heroTopOffset)
                         .padding(.horizontal, 16)
-                        .offset(y: logoYOffset)         // lift the logo up (negative values)
+                        .offset(y: logoYOffset)
                         .allowsHitTesting(false)
                         .zIndex(1)
                 }
 
                 .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
 
-                // sheets & alerts (unchanged except Settings presentation split below)
+                // Sheets & alerts (unchanged)
                 .sheet(isPresented: $showJobHistory) {
                     JobHistorySheetView(
                         deletedJobs: deletedJobs,
@@ -87,15 +108,12 @@ struct HomeView: View {
                         onDone: { showJobHistory = false }
                     )
                 }
-
-                // Settings: present as a normal sheet when Beta Glass is OFF
                 .sheet(isPresented: Binding(
                     get: { showSettings && !isBetaGlassEnabled },
                     set: { if !$0 { showSettings = false } }
                 )) {
                     SettingsView()
                 }
-
                 .sheet(isPresented: $showColorPicker) {
                     ColorPickerView(
                         selectedItem: selectedItemBinding,
@@ -106,23 +124,127 @@ struct HomeView: View {
                 .alert("Rename Job", isPresented: $isRenaming) { renameAlertButtons }
                 .alert("Confirm Permanent Deletion", isPresented: deletionAlertFlag) {
                     deletionAlertButtons
-                } message: {
-                    Text("This action cannot be undone.")
-                }
+                } message: { Text("This action cannot be undone.") }
 
-                // Settings: present as a floating glass panel when Beta Glass is ON
+                // Settings as floating panel when Beta Glass ON
                 .overlay {
                     if showSettings && isBetaGlassEnabled {
                         SettingsPanel(isPresented: $showSettings)
-                            .zIndex(2) // keep above everything else
+                            .zIndex(2)
                     }
                 }
             }
-            .preferredColorScheme(isDarkMode ? .dark : .light)
         }
     }
 
-    // MARK: - Subviews
+    // MARK: - iPad (NavigationSplitView with sidebar + detail)
+
+    private var iPadSplitView: some View {
+        NavigationSplitView {
+            List(selection: $splitSelectionID) {
+                ForEach(jobs, id: \.persistentModelID) { (job: Job) in
+                    JobRowView(job: job)
+                        .contentShape(Rectangle())
+                        .tag(job.persistentModelID)
+                        .contextMenu {
+                            Button("Rename") { startRenaming(job) }
+                            Button("Change Color") {
+                                selectedJob = job
+                                showColorPicker = true
+                            }
+                            Button("Delete", role: .destructive) {
+                                softDelete(job)
+                            }
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                            Button { startRenaming(job) } label: {
+                                Label("Rename", systemImage: "pencil")
+                            }
+                            .tint(.blue)
+                            Button {
+                                selectedJob = job
+                                showColorPicker = true
+                            } label: {
+                                Label("Change Color", systemImage: "paintbrush")
+                            }
+                            .tint(.green)
+                        }
+                        .swipeActions {
+                            Button(role: .destructive) { softDelete(job) } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                }
+                .onDelete(perform: deleteJob)
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .toolbar { toolbarContent }
+            .navigationTitle(".nexusStack")
+
+            // Footer button (kept near sidebar bottom)
+            .safeAreaInset(edge: .bottom) {
+                if !deletedJobs.isEmpty {
+                    Button { showJobHistory = true } label: {
+                        HStack {
+                            Text("Stack History").font(.subheadline)
+                            Image(systemName: "chevron.right").font(.subheadline)
+                        }
+                        .foregroundStyle(.blue)
+                        .padding(.vertical, 8)
+                    }
+                    .padding(.horizontal)
+                }
+            }
+
+        } detail: {
+            if let id = splitSelectionID,
+               let job = jobs.first(where: { $0.persistentModelID == id }) {
+                JobDetailView(job: job)
+            } else {
+                // Empty state on iPad before selection
+                ContentUnavailableView(
+                    "Select a Stack",
+                    systemImage: "folder",
+                    description: Text("Choose a stack from the sidebar to view its details.")
+                )
+            }
+        }
+        // Shared sheets/alerts for iPad
+        .sheet(isPresented: $showJobHistory) {
+            JobHistorySheetView(
+                deletedJobs: deletedJobs,
+                jobToDeletePermanently: $jobToDeletePermanently,
+                onDone: { showJobHistory = false }
+            )
+        }
+        .sheet(isPresented: Binding(
+            get: { showSettings && !isBetaGlassEnabled },
+            set: { if !$0 { showSettings = false } }
+        )) {
+            SettingsView()
+        }
+        .sheet(isPresented: $showColorPicker) {
+            ColorPickerView(
+                selectedItem: selectedItemBinding,
+                isPresented: $showColorPicker
+            )
+            .presentationDetents([.medium])
+        }
+        .alert("Rename Job", isPresented: $isRenaming) { renameAlertButtons }
+        .alert("Confirm Permanent Deletion", isPresented: deletionAlertFlag) {
+            deletionAlertButtons
+        } message: { Text("This action cannot be undone.") }
+        .overlay {
+            if showSettings && isBetaGlassEnabled {
+                SettingsPanel(isPresented: $showSettings)
+                    .zIndex(2)
+            }
+        }
+        .background(Gradient(colors: [.blue, .purple]).opacity(0.1))
+    }
+
+    // MARK: - Original iPhone list (reused)
 
     private var jobList: some View {
         List {
@@ -130,13 +252,11 @@ struct HomeView: View {
                 JobRowView(job: job)
                     .contentShape(Rectangle())
                     .onTapGesture { navJob = job }
-
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         Button { startRenaming(job) } label: {
                             Label("Rename", systemImage: "pencil")
                         }
                         .tint(.blue)
-
                         Button {
                             selectedJob = job
                             showColorPicker = true
@@ -145,7 +265,7 @@ struct HomeView: View {
                         }
                         .tint(.green)
                     }
-                    .swipeActions(edge: .trailing) {
+                    .swipeActions {
                         Button(role: .destructive) { softDelete(job) } label: {
                             Label("Delete", systemImage: "trash")
                         }
@@ -164,7 +284,7 @@ struct HomeView: View {
         if !deletedJobs.isEmpty {
             Button { showJobHistory = true } label: {
                 HStack {
-                    Text("Job History").font(.subheadline)
+                    Text("Stack History").font(.subheadline)
                     Image(systemName: "chevron.right").font(.subheadline)
                 }
                 .foregroundStyle(.blue)
@@ -181,14 +301,14 @@ struct HomeView: View {
         ToolbarItem(placement: .topBarLeading) {
             Menu {
                 Button("Settings") { showSettings = true }
-                Button("Option 1") { /* future */ }
-                Button("Option 2") { /* future */ }
+               // Button("Option 1") { /* future */ }
+               // Button("Option 2") { /* future */ }
             } label: {
                 Label("Menu", systemImage: "line.horizontal.3")
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button("Add Job", systemImage: "plus") { addJob() }
+            Button("Add Stack", systemImage: "plus") { addJob() }
         }
     }
 
@@ -264,10 +384,10 @@ struct HomeView: View {
 
     private func addJob() {
         let jobCount = jobs.count + 1
-        let newJob = Job(title: "Job \(jobCount)")
+        let newJob = Job(title: "Stack \(jobCount)")
         modelContext.insert(newJob)
         do { try modelContext.save() } catch {
-            print("Error saving new job: \(error)")
+            print("Error saving new stack: \(error)")
         }
     }
 

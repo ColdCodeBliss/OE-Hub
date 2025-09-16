@@ -6,8 +6,12 @@ struct JobRowView: View {
 
     // Classic (fallback) and Beta (real Liquid Glass) toggles
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
-    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
+    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
     @Environment(\.colorScheme) private var colorScheme
+
+    // 🔧 Slider-driven white glow intensity (set this from SettingsPanel)
+    // Suggested slider range: 0.00 ... 0.60
+    @AppStorage("betaWhiteGlowOpacity") private var betaWhiteGlowOpacity: Double = 0.22
 
     private let radius: CGFloat = 20
 
@@ -43,7 +47,7 @@ struct JobRowView: View {
     @ViewBuilder
     private func cardBackground(tint: Color) -> some View {
         if #available(iOS 26.0, *), isBetaGlassEnabled {
-            // ✅ Real Liquid Glass (iOS 18+)
+            // ✅ Real Liquid Glass (iOS 26+)
             ZStack {
                 Color.clear
                     .glassEffect(
@@ -93,10 +97,11 @@ struct JobRowView: View {
         : .black.opacity(0.06)
     }
 
-    // New: dynamic shadow color (white glow in dark mode + Beta glass)
+    // 🔥 White glow only in Dark Mode + Beta; otherwise your previous shadows
     private var currentShadowColor: Color {
         if isBetaGlassEnabled && colorScheme == .dark {
-            return Color.white.opacity(0.21)   // tweak 0.22–0.35 to taste
+            let clamped = max(0.0, min(betaWhiteGlowOpacity, 1.0)) // safety clamp
+            return Color.white.opacity(clamped)
         }
         return (isBetaGlassEnabled || isLiquidGlassEnabled)
             ? Color.black.opacity(0.25)

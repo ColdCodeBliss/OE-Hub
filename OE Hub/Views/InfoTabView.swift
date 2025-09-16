@@ -1,6 +1,6 @@
 //
 // InfoTabView.swift
-// WorkForge
+// nexusStack
 //
 // Created by Ryan Bliss on 9/4/25.
 //
@@ -61,11 +61,11 @@ struct InfoTabView: View {
                         loadJobInfo()
                         showEditForm = true
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.blue.opacity(0.8))
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(.blue.opacity(0.8))
+                        .foregroundStyle(.white)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)

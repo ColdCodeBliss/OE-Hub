@@ -144,18 +144,13 @@ struct GitHubBrowserView: View {
                         }
                         .padding(.horizontal)
 
-                        // Recent per-job repos
-
-                        // In the URL entry view, replace the FlowLayout block with CenteredWrap:
-
-                        // Recent per-job repos
+                        // Recent per-job repos (centered under the URL field)
                         if !recentRepos.isEmpty {
                             VStack(alignment: .center, spacing: 8) {
                                 Text("Recent")
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
 
-                                // ⬇️ New centered, wrapping layout for the chips
                                 CenteredWrap(spacing: 8) {
                                     ForEach(recentRepos, id: \.self) { url in
                                         Button {
@@ -175,11 +170,10 @@ struct GitHubBrowserView: View {
                                         .buttonStyle(.plain)
                                     }
                                 }
-                                .frame(maxWidth: .infinity)   // ensure the layout knows the full width
+                                .frame(maxWidth: .infinity)   // give the layout full width to center rows
                             }
                             .padding(.horizontal)
                         }
-
 
                         if let err = errorMessage {
                             Text(err).foregroundStyle(.red).font(.footnote)
@@ -487,8 +481,6 @@ struct GitHubBrowserView: View {
     }
 }
 
-// MARK: - Simple flow layout for recent chips
-
 // MARK: - Centered, wrapping layout for chips (iOS 16+)
 
 fileprivate struct CenteredWrap: Layout {
@@ -499,13 +491,12 @@ fileprivate struct CenteredWrap: Layout {
         subviews: Subviews,
         cache: inout ()
     ) -> CGSize {
-        // We expect a concrete width (parent gives us .infinity via frame)
         let maxWidth = proposal.width ?? 0
         guard maxWidth > 0 else {
-            // Fallback: stack vertically if no width was proposed
+            // Fallback if no width proposed
             let totalHeight = subviews
                 .map { $0.sizeThatFits(.unspecified).height }
-                .reduce(0) { $0 + $1 } + spacing * max(0, CGFloat(subviews.count - 1))
+                .reduce(0, +) + spacing * max(0, CGFloat(subviews.count - 1))
             let maxW = subviews
                 .map { $0.sizeThatFits(.unspecified).width }
                 .max() ?? 0
@@ -519,19 +510,15 @@ fileprivate struct CenteredWrap: Layout {
 
         for sub in subviews {
             let size = sub.sizeThatFits(.unspecified)
-            let w = size.width
-            let h = size.height
-
-            let next = (currentRowWidth == 0 ? w : currentRowWidth + spacing + w)
+            let next = (currentRowWidth == 0 ? size.width : currentRowWidth + spacing + size.width)
             if next > maxWidth, currentRowWidth > 0 {
-                // commit row
                 totalHeight += currentRowHeight + spacing
                 hasAny = true
-                currentRowWidth = w
-                currentRowHeight = h
+                currentRowWidth = size.width
+                currentRowHeight = size.height
             } else {
                 currentRowWidth = next
-                currentRowHeight = max(currentRowHeight, h)
+                currentRowHeight = max(currentRowHeight, size.height)
             }
         }
 
@@ -539,7 +526,6 @@ fileprivate struct CenteredWrap: Layout {
             totalHeight += currentRowHeight
             hasAny = true
         }
-
         if !hasAny { totalHeight = 0 }
         return CGSize(width: maxWidth, height: totalHeight)
     }
@@ -553,50 +539,45 @@ fileprivate struct CenteredWrap: Layout {
         let maxWidth = bounds.width
         guard maxWidth > 0 else { return }
 
-        var rows: [[(Int, CGSize)]] = []
-        var currentRow: [(Int, CGSize)] = []
-        var currentRowWidth: CGFloat = 0
-        var currentRowHeight: CGFloat = 0
-
         // Build rows
-        for (idx, sub) in subviews.enumerated() {
-            let size = sub.sizeThatFits(.unspecified)
-            let w = size.width
-            let h = size.height
+        var rows: [[(Int, CGSize)]] = []
+        var row: [(Int, CGSize)] = []
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
 
-            let next = (currentRowWidth == 0 ? w : currentRowWidth + spacing + w)
-            if next > maxWidth, !currentRow.isEmpty {
-                rows.append(currentRow)
-                currentRow = [(idx, size)]
-                currentRowWidth = w
-                currentRowHeight = h
+        for (i, sub) in subviews.enumerated() {
+            let size = sub.sizeThatFits(.unspecified)
+            let next = (rowWidth == 0 ? size.width : rowWidth + spacing + size.width)
+            if next > maxWidth, !row.isEmpty {
+                rows.append(row)
+                row = [(i, size)]
+                rowWidth = size.width
+                rowHeight = size.height
             } else {
-                currentRow.append((idx, size))
-                currentRowWidth = next
-                currentRowHeight = max(currentRowHeight, h)
+                row.append((i, size))
+                rowWidth = next
+                rowHeight = max(rowHeight, size.height)
             }
         }
-        if !currentRow.isEmpty { rows.append(currentRow) }
+        if !row.isEmpty { rows.append(row) }
 
-        // Place rows centered
+        // Center each row
         var y = bounds.minY
-        for row in rows {
-            let rowWidth = row.reduce(0) { partial, pair in
-                let w = pair.1.width
-                return partial == 0 ? w : partial + spacing + w
+        for r in rows {
+            let rWidth = r.reduce(0) { partial, pair in
+                partial == 0 ? pair.1.width : partial + spacing + pair.1.width
             }
-            let rowHeight = row.map { $0.1.height }.max() ?? 0
-            var x = bounds.minX + (maxWidth - rowWidth) / 2
+            let rHeight = r.map { $0.1.height }.max() ?? 0
+            var x = bounds.minX + (maxWidth - rWidth) / 2
 
-            for (idx, size) in row {
+            for (idx, size) in r {
                 subviews[idx].place(
-                    at: CGPoint(x: x, y: y + (rowHeight - size.height)/2),
+                    at: CGPoint(x: x, y: y + (rHeight - size.height)/2),
                     proposal: ProposedViewSize(width: size.width, height: size.height)
                 )
                 x += size.width + spacing
             }
-            y += rowHeight + spacing
+            y += rHeight + spacing
         }
     }
 }
-

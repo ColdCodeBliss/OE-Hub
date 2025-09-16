@@ -382,7 +382,7 @@ struct DueTabView: View {
     @ViewBuilder
     private func rowBackground(tint: Color, radius: CGFloat) -> some View {
         if #available(iOS 26.0, *), isBetaGlassEnabled {
-            // Real Liquid Glass (iOS 18+): glass bubble with gentle highlight
+            // Real Liquid Glass (iOS 26+): glass bubble with gentle highlight
             ZStack {
                 Color.clear
                     .glassEffect(

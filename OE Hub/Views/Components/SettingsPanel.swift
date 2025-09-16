@@ -5,7 +5,6 @@
 //  Created by Ryan Bliss on 9/10/25.
 //
 
-
 import SwiftUI
 
 struct SettingsPanel: View {
@@ -14,6 +13,9 @@ struct SettingsPanel: View {
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real glass
+
+    // NEW: persists across launches; 0.0 (no glow) ... 1.0 (max glow)
+    @AppStorage("betaWhiteGlowOpacity") private var betaWhiteGlowOpacity: Double = 0.60
 
     @State private var showDonateSheet = false
 
@@ -66,7 +68,7 @@ struct SettingsPanel: View {
                                 )
 
                                 if #available(iOS 26.0, *) {
-                                    Toggle("Liquid Glass (Beta, iOS 18+)", isOn:
+                                    Toggle("Liquid Glass (Beta, iOS 26+)", isOn:
                                         Binding(
                                             get: { isBetaGlassEnabled },
                                             set: { newValue in
@@ -76,15 +78,35 @@ struct SettingsPanel: View {
                                         )
                                     )
                                 } else {
-                                    Toggle("Liquid Glass (Beta, iOS 18+)", isOn: .constant(false))
+                                    Toggle("Liquid Glass (Beta, iOS 26+)", isOn: .constant(false))
                                         .disabled(true)
                                         .foregroundStyle(.secondary)
+                                }
+
+                                // NEW: Glow intensity slider — only when Beta Glass is ON (iOS 26+)
+                                if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("Glow intensity")
+                                            Spacer()
+                                            Text("\(Int(betaWhiteGlowOpacity * 100))%")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Slider(value: $betaWhiteGlowOpacity, in: 0.0...1.0, step: 0.05)
+                                            .accessibilityLabel("Glow intensity")
+                                        Text("Controls highlight/shine strength for Liquid Glass surfaces.")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.top, 4)
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
                                 }
                             }
                             .padding(12)
                             .background(cardBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.08)))
+                            .animation(.default, value: isBetaGlassEnabled)
                         }
 
                         // Support
@@ -93,7 +115,7 @@ struct SettingsPanel: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 12) {
-                                Link("Contact Support", destination: URL(string: "mailto:support@workforge.app")!)
+                                Link("Bug Submission", destination: URL(string: "mailto:coldcodebliss@gmail.com")!)
 
                                 if #available(iOS 26.0, *), isBetaGlassEnabled {
                                     Button("Donate") { showDonateSheet = true }
@@ -123,7 +145,7 @@ struct SettingsPanel: View {
                             Text("About")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
-                            Text("NexusForge Stack helps OE professionals manage jobs, deliverables, and checklists efficiently.")
+                            Text(".nexusStack helps freelancers, teams, and OE professionals manage jobs, deliverables, and GitHub repo's efficiently.")
                                 .foregroundStyle(.secondary)
                                 .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -180,10 +202,10 @@ private struct DonateSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Support Development").font(.title2.bold())
-            Text("If you find value in NexusForge Stack, consider a small donation. Thank you!")
+            Text("If you find value in nexusStack, consider a small donation. Thank you!")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Link("Open Venmo", destination: URL(string: "https://venmo.com/")!)
+            Link("Open Venmo", destination: URL(string: "https://venmo.com/u/nexusStack")!)
                 .font(.body)
                 .padding()
                 .background(Color.blue.opacity(0.8))
