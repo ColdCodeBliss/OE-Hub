@@ -301,8 +301,8 @@ struct HomeView: View {
         ToolbarItem(placement: .topBarLeading) {
             Menu {
                 Button("Settings") { showSettings = true }
-                Button("Option 1") { /* future */ }
-                Button("Option 2") { /* future */ }
+               // Button("Option 1") { /* future */ }
+               // Button("Option 2") { /* future */ }
             } label: {
                 Label("Menu", systemImage: "line.horizontal.3")
             }

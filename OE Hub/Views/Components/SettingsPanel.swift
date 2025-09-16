@@ -93,7 +93,7 @@ struct SettingsPanel: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 12) {
-                                Link("Contact Support", destination: URL(string: "mailto:coldcodebliss@gmail.com")!)
+                                Link("Bug Submission", destination: URL(string: "mailto:coldcodebliss@gmail.com")!)
 
                                 if #available(iOS 26.0, *), isBetaGlassEnabled {
                                     Button("Donate") { showDonateSheet = true }
