@@ -18,7 +18,11 @@ struct JobDetailView: View {
 
     // Sheets
     @State private var showGitHubBrowser: Bool = false
-    @State private var showConfluenceSheet: Bool = false   // ← NEW
+    @State private var showConfluenceSheet: Bool = false
+
+    // Style toggles (match rest of app)
+    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
+    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
 
     var job: Job
 
@@ -33,7 +37,6 @@ struct JobDetailView: View {
             .sheet(isPresented: $showGitHubBrowser) {
                 GitHubBrowserView(recentKey: "recentRepos.\(job.repoBucketKey)")
             }
-            
             // Confluence links (per-job key; up to 5)
             .sheet(isPresented: $showConfluenceSheet) {
                 ConfluenceLinksView(
@@ -41,9 +44,7 @@ struct JobDetailView: View {
                     maxLinks: 5
                 )
             }
-
-
-        }
+    }
 
     // MARK: - Split main content
 
@@ -121,29 +122,48 @@ struct JobDetailView: View {
                 .accessibilityLabel("Add Checklist Item")
 
         case .info:
-            // Confluence (left) + GitHub (right)
-            HStack(spacing: 14) {
-                Button(action: { showConfluenceSheet = true }) {
-                    Image("Confluence_icon")
-                        .renderingMode(.original)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 22, height: 22)
-                        .accessibilityLabel("Open Confluence")
+            // Confluence (left) + GitHub (right) with glassy pills (Beta/Classic)
+            HStack(spacing: 10) {
+                toolbarIconButton(assetName: "Confluence_icon", accessibility: "Open Confluence") {
+                    showConfluenceSheet = true
                 }
-
-                Button(action: { showGitHubBrowser = true }) {
-                    Image("github")
-                        .renderingMode(.original)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 22, height: 22)
-                        .accessibilityLabel("Open GitHub Browser")
+                toolbarIconButton(assetName: "github", accessibility: "Open GitHub Browser") {
+                    showGitHubBrowser = true
                 }
             }
 
         default:
             EmptyView()
+        }
+    }
+
+    // MARK: - Toolbar helpers (glassy icon pill)
+
+    private func toolbarIconButton(assetName: String, accessibility: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(assetName)
+                .renderingMode(.original)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 18, height: 18)
+                .padding(8) // room for the pill
+                .accessibilityLabel(accessibility)
+        }
+        .background(toolbarPillBackground)
+        .clipShape(Capsule())
+        .overlay(
+            Capsule().stroke(Color.white.opacity((isBetaGlassEnabled || isLiquidGlassEnabled) ? 0.10 : 0), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var toolbarPillBackground: some View {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
+            Color.clear.glassEffect(.regular, in: .capsule)
+        } else if isLiquidGlassEnabled {
+            Capsule().fill(.ultraThinMaterial)
+        } else {
+            Color.clear
         }
     }
 }

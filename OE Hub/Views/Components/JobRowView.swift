@@ -47,7 +47,7 @@ struct JobRowView: View {
     @ViewBuilder
     private func cardBackground(tint: Color) -> some View {
         if #available(iOS 26.0, *), isBetaGlassEnabled {
-            // ✅ Real Liquid Glass (iOS 18+)
+            // ✅ Real Liquid Glass (iOS 26+)
             ZStack {
                 Color.clear
                     .glassEffect(
