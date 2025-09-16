@@ -5,7 +5,6 @@
 //  Created by Ryan Bliss on 9/10/25.
 //
 
-
 import SwiftUI
 
 struct SettingsPanel: View {
@@ -14,6 +13,9 @@ struct SettingsPanel: View {
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real glass
+
+    // NEW: persists across launches; 0.0 (no glow) ... 1.0 (max glow)
+    @AppStorage("betaWhiteGlowOpacity") private var betaWhiteGlowOpacity: Double = 0.60
 
     @State private var showDonateSheet = false
 
@@ -80,11 +82,31 @@ struct SettingsPanel: View {
                                         .disabled(true)
                                         .foregroundStyle(.secondary)
                                 }
+
+                                // NEW: Glow intensity slider — only when Beta Glass is ON (iOS 26+)
+                                if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Text("Glow intensity")
+                                            Spacer()
+                                            Text("\(Int(betaWhiteGlowOpacity * 100))%")
+                                                .foregroundStyle(.secondary)
+                                        }
+                                        Slider(value: $betaWhiteGlowOpacity, in: 0.0...1.0, step: 0.05)
+                                            .accessibilityLabel("Glow intensity")
+                                        Text("Controls highlight/shine strength for Liquid Glass surfaces.")
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    .padding(.top, 4)
+                                    .transition(.opacity.combined(with: .move(edge: .top)))
+                                }
                             }
                             .padding(12)
                             .background(cardBackground)
                             .clipShape(RoundedRectangle(cornerRadius: 14))
                             .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.08)))
+                            .animation(.default, value: isBetaGlassEnabled)
                         }
 
                         // Support

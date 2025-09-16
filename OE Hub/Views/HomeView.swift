@@ -187,7 +187,7 @@ struct HomeView: View {
                 if !deletedJobs.isEmpty {
                     Button { showJobHistory = true } label: {
                         HStack {
-                            Text("Job History").font(.subheadline)
+                            Text("Stack History").font(.subheadline)
                             Image(systemName: "chevron.right").font(.subheadline)
                         }
                         .foregroundStyle(.blue)
@@ -284,7 +284,7 @@ struct HomeView: View {
         if !deletedJobs.isEmpty {
             Button { showJobHistory = true } label: {
                 HStack {
-                    Text("Job History").font(.subheadline)
+                    Text("Stack History").font(.subheadline)
                     Image(systemName: "chevron.right").font(.subheadline)
                 }
                 .foregroundStyle(.blue)
