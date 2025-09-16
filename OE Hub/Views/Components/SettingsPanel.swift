@@ -93,7 +93,7 @@ struct SettingsPanel: View {
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             VStack(alignment: .leading, spacing: 12) {
-                                Link("Contact Support", destination: URL(string: "mailto:support@workforge.app")!)
+                                Link("Contact Support", destination: URL(string: "mailto:coldcodebliss@gmail.com")!)
 
                                 if #available(iOS 26.0, *), isBetaGlassEnabled {
                                     Button("Donate") { showDonateSheet = true }
@@ -180,7 +180,7 @@ private struct DonateSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Support Development").font(.title2.bold())
-            Text("If you find value in NexusForge Stack, consider a small donation. Thank you!")
+            Text("If you find value in nexusStack, consider a small donation. Thank you!")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Link("Open Venmo", destination: URL(string: "https://venmo.com/u/nexusStack")!)

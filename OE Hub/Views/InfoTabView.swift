@@ -1,6 +1,6 @@
 //
 // InfoTabView.swift
-// WorkForge
+// nexusStack
 //
 // Created by Ryan Bliss on 9/4/25.
 //

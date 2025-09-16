@@ -27,12 +27,28 @@ struct MindMapTabView: View {
     @State private var showAutoArrangeConfirm = false
 
     @FocusState private var focusedNodeID: UUID?
-
-    private var isLandscape: Bool { viewSize.width > viewSize.height }
+    
     private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
-    private var slideDistance: CGFloat { isLandscape ? 156 : 94 }
-    private var expandedTrailingPad: CGFloat { isLandscape ? -55 : 9 }
-    private var collapsedTrailingPad: CGFloat { isLandscape ? -40 : -40 }
+    private var isLandscape: Bool { viewSize.width > viewSize.height }
+
+    /// How far the whole toolbar slides right when collapsed
+    private var slideDistance: CGFloat {
+        if isPad && isLandscape { return 134 }     // smaller shove on iPad-landscape so it doesn't disappear
+        return isLandscape ? 156 : 94
+    }
+
+    /// Right padding when expanded (positive pulls inward, negative pushes off-screen)
+    private var expandedTrailingPad: CGFloat {
+        if isPad && isLandscape { return 12 }      // keep capsule fully on-screen in iPad-landscape
+        return isLandscape ? -55 : 9
+    }
+
+    /// Right padding when collapsed
+    private var collapsedTrailingPad: CGFloat {
+        if isPad && isLandscape { return 0 }       // avoid hiding the capsule completely
+        return isLandscape ? -40 : -40
+    }
+
     
     
     

@@ -180,7 +180,7 @@ struct HomeView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .toolbar { toolbarContent }
-            .navigationTitle("Stacks")
+            .navigationTitle(".nexusStack")
 
             // Footer button (kept near sidebar bottom)
             .safeAreaInset(edge: .bottom) {

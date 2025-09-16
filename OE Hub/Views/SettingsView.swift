@@ -66,7 +66,7 @@ struct SettingsView: View {
                                 useBetaGlass: useBetaGlass,
                                 useClassicGlass: useClassicGlass) {
 
-                        Link("Bug Submission", destination: URL(string: "mailto:support@workforge.app")!)
+                        Link("Bug Submission", destination: URL(string: "mailto:coldcodebliss@gmail.com")!)
 
                         if #available(iOS 26.0, *), useBetaGlass {
                             Button("Donate") { showDonateSheet = true }
@@ -166,7 +166,7 @@ private struct DonateSheet: View {
     var body: some View {
         VStack(spacing: 16) {
             Text("Support Development").font(.title2.bold())
-            Text("If you find value in NexusForge Stack, consider a small donation. Thank you!")
+            Text("If you find value in nexusStack, consider a small donation. Thank you!")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
