@@ -5,6 +5,7 @@ struct SettingsView: View {
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic (fallback)
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real Liquid Glass (iOS 26+)
 
+    @Environment(\.horizontalSizeClass) private var hSize
     @State private var showDonateSheet = false
 
     // Convenience flags
@@ -17,7 +18,12 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 16) {
+                // Adaptive two-column on iPad, one-column on iPhone
+                let columns: [GridItem] = [
+                    GridItem(.adaptive(minimum: 360, maximum: 520), spacing: 16, alignment: .top)
+                ]
+
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
 
                     // MARK: Appearance
                     SectionCard(title: "Appearance",
@@ -88,11 +94,15 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+                .frame(maxWidth: 1100) // nicer margins on iPad
+                .frame(maxWidth: .infinity)
             }
             .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showDonateSheet) {
                 DonateSheet()
-                    .presentationDetents([.medium, .large])   // lets the system apply Liquid Glass to the sheet
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             // Resolve legacy state if both were ON previously
             .onAppear {
@@ -135,14 +145,11 @@ private struct SectionCard<Content: View>: View {
     @ViewBuilder
     private var cardBackground: some View {
         if #available(iOS 26.0, *), useBetaGlass {
-            // ✅ Real Liquid Glass
             Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 16))
         } else if useClassicGlass {
-            // 🌈 Classic glassy fallback
             RoundedRectangle(cornerRadius: 16)
                 .fill(.ultraThinMaterial)
         } else {
-            // 🎨 Solid card
             RoundedRectangle(cornerRadius: 16)
                 .fill(Color(.secondarySystemBackground))
         }
@@ -171,5 +178,6 @@ private struct DonateSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         .padding()
+        .frame(maxWidth: 520) // nice width on iPad
     }
 }

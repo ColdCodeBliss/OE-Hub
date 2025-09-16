@@ -34,13 +34,14 @@ struct JobDetailView: View {
                 GitHubBrowserView(recentKey: "recentRepos.\(job.repoBucketKey)")
             }
             
-        // Confluence links (per-job key; up to 5)
+            // Confluence links (per-job key; up to 5)
             .sheet(isPresented: $showConfluenceSheet) {
                 ConfluenceLinksView(
                     storageKey: "confluenceLinks.\(job.repoBucketKey)",
                     maxLinks: 5
                 )
             }
+
 
         }
 

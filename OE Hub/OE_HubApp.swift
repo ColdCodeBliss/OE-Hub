@@ -11,9 +11,9 @@ import SwiftData
 @main
 struct OE_HubApp: App {
     var body: some Scene {
-            WindowGroup {
-                HomeView()
-                    .modelContainer(for: [Job.self, Deliverable.self, ChecklistItem.self, MindNode.self, Note.self])
-            }
+        WindowGroup {
+            HomeView()
+                .modelContainer(for: [Job.self, Deliverable.self, ChecklistItem.self, MindNode.self, Note.self])
         }
     }
+}

@@ -240,8 +240,14 @@ struct MindMapTabView: View {
     private var controlsBar: some View {
         HStack(spacing: 10) {
             Button { zoom(by: -0.15) } label: { controlIcon("minus.magnifyingglass") }
+                .keyboardShortcut("-", modifiers: [.command])
+
             Button { zoom(by:  0.15) } label: { controlIcon("plus.magnifyingglass") }
-            Button { centerOnRoot() }   label: { controlIcon("target") }
+                .keyboardShortcut("=", modifiers: [.command]) // standard for zoom-in
+
+            Button { centerOnRoot() } label: { controlIcon("target") }
+                .keyboardShortcut("0", modifiers: [.command])
+
             Button { addChild() }       label: { controlIcon("plus") }
 
             if let s = selected, !s.isRoot {
@@ -828,8 +834,22 @@ private struct NodeBubbleSnapshot: View {
 private struct ActivityView: UIViewControllerRepresentable {
     let activityItems: [Any]
     let applicationActivities: [UIActivity]? = nil
+
     func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+        let vc = UIActivityViewController(activityItems: activityItems,
+                                          applicationActivities: applicationActivities)
+
+        if let pop = vc.popoverPresentationController {
+            // Center-bottom anchor as a safe default on iPad
+            pop.sourceRect = CGRect(x: UIScreen.main.bounds.midX,
+                                    y: UIScreen.main.bounds.maxY - 1,
+                                    width: 0, height: 0)
+            pop.sourceView = UIApplication.shared.connectedScenes
+                .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+                .first
+        }
+        return vc
     }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
+
