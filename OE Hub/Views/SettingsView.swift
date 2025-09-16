@@ -170,7 +170,7 @@ private struct DonateSheet: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
 
-            Link("Open Venmo", destination: URL(string: "https://venmo.com/")!)
+            Link("Open Venmo", destination: URL(string: "https://venmo.com/u/nexusStack")!)
                 .font(.body)
                 .padding()
                 .background(Color.blue.opacity(0.8))

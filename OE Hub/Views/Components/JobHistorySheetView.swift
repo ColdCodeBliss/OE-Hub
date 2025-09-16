@@ -39,7 +39,7 @@ struct JobHistorySheetView: View {
                     }
                 }
             }
-            .navigationTitle("Job History")
+            .navigationTitle("Stack History")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { onDone() }

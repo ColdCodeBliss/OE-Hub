@@ -180,7 +180,7 @@ struct HomeView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .toolbar { toolbarContent }
-            .navigationTitle("Jobs")
+            .navigationTitle("Stacks")
 
             // Footer button (kept near sidebar bottom)
             .safeAreaInset(edge: .bottom) {
@@ -204,9 +204,9 @@ struct HomeView: View {
             } else {
                 // Empty state on iPad before selection
                 ContentUnavailableView(
-                    "Select a Job",
+                    "Select a Stack",
                     systemImage: "folder",
-                    description: Text("Choose a job from the sidebar to view its details.")
+                    description: Text("Choose a stack from the sidebar to view its details.")
                 )
             }
         }
@@ -308,7 +308,7 @@ struct HomeView: View {
             }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Button("Add Job", systemImage: "plus") { addJob() }
+            Button("Add Stack", systemImage: "plus") { addJob() }
         }
     }
 
@@ -384,10 +384,10 @@ struct HomeView: View {
 
     private func addJob() {
         let jobCount = jobs.count + 1
-        let newJob = Job(title: "Job \(jobCount)")
+        let newJob = Job(title: "Stack \(jobCount)")
         modelContext.insert(newJob)
         do { try modelContext.save() } catch {
-            print("Error saving new job: \(error)")
+            print("Error saving new stack: \(error)")
         }
     }
 

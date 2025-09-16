@@ -66,7 +66,7 @@ struct SettingsPanel: View {
                                 )
 
                                 if #available(iOS 26.0, *) {
-                                    Toggle("Liquid Glass (Beta, iOS 18+)", isOn:
+                                    Toggle("Liquid Glass (Beta, iOS 26+)", isOn:
                                         Binding(
                                             get: { isBetaGlassEnabled },
                                             set: { newValue in
@@ -76,7 +76,7 @@ struct SettingsPanel: View {
                                         )
                                     )
                                 } else {
-                                    Toggle("Liquid Glass (Beta, iOS 18+)", isOn: .constant(false))
+                                    Toggle("Liquid Glass (Beta, iOS 26+)", isOn: .constant(false))
                                         .disabled(true)
                                         .foregroundStyle(.secondary)
                                 }
@@ -123,7 +123,7 @@ struct SettingsPanel: View {
                             Text("About")
                                 .font(.subheadline.weight(.semibold))
                                 .foregroundStyle(.secondary)
-                            Text("NexusForge Stack helps OE professionals manage jobs, deliverables, and checklists efficiently.")
+                            Text(".nexusStack helps freelancers, teams, and OE professionals manage jobs, deliverables, and GitHub repo's efficiently.")
                                 .foregroundStyle(.secondary)
                                 .padding(12)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -183,7 +183,7 @@ private struct DonateSheet: View {
             Text("If you find value in NexusForge Stack, consider a small donation. Thank you!")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Link("Open Venmo", destination: URL(string: "https://venmo.com/")!)
+            Link("Open Venmo", destination: URL(string: "https://venmo.com/u/nexusStack")!)
                 .font(.body)
                 .padding()
                 .background(Color.blue.opacity(0.8))
