@@ -33,12 +33,23 @@ struct JobDetailView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { trailingButton }
             }
-            // GitHub browser (namespaced by this Job’s key)
-            .sheet(isPresented: $showGitHubBrowser) {
+
+            // GitHub: sheet for Classic/Standard, full-screen overlay for Beta
+            .sheet(isPresented: Binding(
+                get: { !isBetaGlassEnabled && showGitHubBrowser },
+                set: { if !$0 { showGitHubBrowser = false } }
+            )) {
                 GitHubBrowserView(recentKey: "recentRepos.\(job.repoBucketKey)")
             }
-            // Confluence links (per-job key; up to 5)
-            .sheet(isPresented: $showConfluenceSheet) {
+            .fullScreenCover(isPresented: Binding(
+                get: { isBetaGlassEnabled && showGitHubBrowser },
+                set: { if !$0 { showGitHubBrowser = false } }
+            )) {
+                GitHubBrowserView(recentKey: "recentRepos.\(job.repoBucketKey)")
+            }
+
+            /// Confluence links (present as full-screen overlay so the panel can be real glass)
+            .fullScreenCover(isPresented: $showConfluenceSheet) {
                 ConfluenceLinksView(
                     storageKey: "confluenceLinks.\(job.repoBucketKey)",
                     maxLinks: 5
