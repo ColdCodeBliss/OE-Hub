@@ -42,7 +42,7 @@ struct InfoTabView: View {
                         Text("Email: \(email)")
                     }
                     if payRate > 0 {
-                        Text("Pay Rate: \(payRate, format: .currency(code: "USD")) per \(payType)")
+                        Text("Pay Rate: \(payRate, format: .currency(code: "USD")) \(payType)")
                     }
                     if !managerName.isEmpty {
                         Text("Manager: \(managerName)")
