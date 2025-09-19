@@ -1,0 +1,87 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "6D24586B",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : false,
+      "internalID" : "6752782412",
+      "localizations" : [
+        {
+          "description" : "A small tip to support ongoing development.",
+          "displayName" : "Support the Developer – $5",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.coldcodebliss.nexusstack.tip.5",
+      "referenceName" : "Tip - $5",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "9.99",
+      "familyShareable" : false,
+      "internalID" : "6752782391",
+      "localizations" : [
+        {
+          "description" : "A small tip to support ongoing development.",
+          "displayName" : "Support the Developer – $10",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.coldcodebliss.nexusstack.tip.10",
+      "referenceName" : "Tip – $10",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "19.99",
+      "familyShareable" : false,
+      "internalID" : "6752782456",
+      "localizations" : [
+        {
+          "description" : "A small tip to support ongoing development.",
+          "displayName" : "Support the Developer – $20",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "com.coldcodebliss.nexusstack.tip.20",
+      "referenceName" : "Tip – $20",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6752594953",
+    "_askToBuyEnabled" : false,
+    "_billingGracePeriodEnabled" : false,
+    "_billingIssuesEnabled" : false,
+    "_developerTeamID" : "86MW3ZP4BF",
+    "_disableDialogs" : false,
+    "_failTransactionsEnabled" : false,
+    "_lastSynchronizedDate" : 779990946.00704503,
+    "_locale" : "en_US",
+    "_renewalBillingIssuesEnabled" : false,
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ],
+    "_timeRate" : 0
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
