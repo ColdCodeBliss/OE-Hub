@@ -17,7 +17,7 @@ final class Deliverable {
     var job: Job?
 
     /// Stored color token (string). Kept for schema stability.
-    var colorCode: String? = "gray"
+    var colorCode: String? = "blue"
 
     /// Stored reminder offsets as raw string codes (e.g., "2weeks", "1week").
     var reminderOffsets: [String]
