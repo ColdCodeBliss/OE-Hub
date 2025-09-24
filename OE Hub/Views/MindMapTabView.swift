@@ -18,6 +18,11 @@ struct MindMapTabView: View {
 
     @State private var viewSize: CGSize = .zero
     @State private var scaleBase: CGFloat = 1.0
+    
+    // Track starting values for gestures
+    @State private var panStart: CGSize = .zero
+    @State private var nodeDragStart: [UUID: CGPoint] = [:]
+
 
     private let childRadius: CGFloat = 220
     private let nodeColorOptions: [String] = ["red","blue","green","yellow","orange","purple","brown","teal","gray"]
@@ -78,15 +83,24 @@ struct MindMapTabView: View {
             .onAppear {
                 viewSize = geo.size
                 ensureRoot()
+
                 if let root = job.mindNodes.first(where: { $0.isRoot }) {
                     center(on: CGPoint(x: root.x, y: root.y))
                 } else {
                     center(on: canvasCenter)
                 }
+
+                // Make the first drag use the current offset as its baseline.
+                // Do it on the next runloop tick in case `center` animates/updates state.
+                DispatchQueue.main.async {
+                    panStart = offset
+                }
             }
-            .onChange(of: geo.size) { _, newSize in
-                viewSize = newSize
+
+            .onChange(of: scale) { oldValue, newValue in
+                panStart = offset   // keep pan baseline in sync with the new zoom
             }
+
         }
         .navigationTitle("Mind Map")
 
@@ -329,12 +343,20 @@ struct MindMapTabView: View {
 
     // MARK: - Gestures / actions (unchanged)
     private var panGesture: some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 12)          // require a more intentional drag
             .onChanged { value in
-                offset = CGSize(width: offset.width + value.translation.width,
-                                height: offset.height + value.translation.height)
+                let sensitivity: CGFloat = 0.25   // ↓ smaller = slower panning
+                let dx = (value.translation.width  * sensitivity) / max(scale, 0.001)
+                let dy = (value.translation.height * sensitivity) / max(scale, 0.001)
+                offset = CGSize(width: panStart.width + dx,
+                                height: panStart.height + dy)
+            }
+            .onEnded { _ in
+                panStart = offset                  // lock in new baseline
             }
     }
+
+
 
     private var zoomGesture: some Gesture {
         MagnificationGesture()
@@ -349,11 +371,26 @@ struct MindMapTabView: View {
     private func nodeDragGesture(for node: MindNode) -> some Gesture {
         DragGesture(minimumDistance: 1)
             .onChanged { v in
-                node.x += Double(v.translation.width / scale)
-                node.y += Double(v.translation.height / scale)
+                // Record the node’s starting point once, at the beginning of the drag
+                if nodeDragStart[node.id] == nil {
+                    nodeDragStart[node.id] = CGPoint(x: node.x, y: node.y)
+                }
+                let start = nodeDragStart[node.id]!  // safe: set just above
+
+                // Apply a gentle sensitivity factor and respect zoom
+                let sensitivity: CGFloat = 0.35  // ↓ smaller = slower drag
+                let dx = (v.translation.width  * sensitivity) / max(scale, 0.001)
+                let dy = (v.translation.height * sensitivity) / max(scale, 0.001)
+
+                node.x = Double(start.x + dx).clamped(to: 0...canvasSize)
+                node.y = Double(start.y + dy).clamped(to: 0...canvasSize)
             }
-            .onEnded { _ in try? modelContext.save() }
+            .onEnded { _ in
+                nodeDragStart[node.id] = nil
+                try? modelContext.save()
+            }
     }
+
 
     private func ensureRoot() {
         if job.mindNodes.contains(where: { $0.isRoot }) { return }
@@ -873,3 +910,8 @@ private struct ActivityView: UIViewControllerRepresentable {
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }
 
+private extension Double {
+    func clamped(to range: ClosedRange<CGFloat>) -> Double {
+        Double(Swift.max(range.lowerBound, Swift.min(range.upperBound, CGFloat(self))))
+    }
+}

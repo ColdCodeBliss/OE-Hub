@@ -27,6 +27,8 @@ struct HomeView: View {
     @State private var selectedJob: Job?
     @State private var showColorPicker = false
     @State private var showSettings = false
+    @State private var showHelp = false
+
 
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
@@ -58,7 +60,7 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - iPhone (existing NavigationStack flow, unchanged layout/overlays)
+    // MARK: - iPhone (existing NavigationStack flow, now with empty-state overlay)
 
     private var iPhoneStackView: some View {
         GeometryReader { geo in
@@ -69,13 +71,22 @@ struct HomeView: View {
             let listGapBelowLogo: CGFloat = isDynamicIsland ? -38 : -28
 
             NavigationStack {
-                VStack {
-                    jobList               // same list as before
-                    jobHistoryButton
-                }
-                // Push content down to sit under the overlayed logo
-                .padding(.top, max(0, heroLogoHeight + heroTopOffset + listGapBelowLogo + logoYOffset))
+                ZStack {
+                    VStack {
+                        jobList               // same list as before
+                        jobHistoryButton
+                    }
+                    // Push content down to sit under the overlayed logo
+                    .padding(.top, max(0, heroLogoHeight + heroTopOffset + listGapBelowLogo + logoYOffset))
 
+                    // -------- iPhone Empty State Overlay --------
+                    if jobs.isEmpty {
+                        iPhoneEmptyState(glassOn: isBetaGlassEnabled)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .allowsHitTesting(false) // don't block taps to +
+                            .transition(.opacity)
+                    }
+                }
                 .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
@@ -131,6 +142,21 @@ struct HomeView: View {
                     if showSettings && isBetaGlassEnabled {
                         SettingsPanel(isPresented: $showSettings)
                             .zIndex(2)
+                    }
+                }
+                // Help as sheet when Beta OFF
+                .sheet(isPresented: Binding(
+                    get: { showHelp && !isBetaGlassEnabled },
+                    set: { if !$0 { showHelp = false } }
+                )) {
+                    HelpView()
+                }
+
+                // Help as floating glass panel when Beta ON
+                .overlay {
+                    if showHelp && isBetaGlassEnabled {
+                        HelpPanel(isPresented: $showHelp)
+                            .zIndex(3)
                     }
                 }
             }
@@ -301,7 +327,7 @@ struct HomeView: View {
         ToolbarItem(placement: .topBarLeading) {
             Menu {
                 Button("Settings") { showSettings = true }
-               // Button("Option 1") { /* future */ }
+                Button("Help") { showHelp = true }
                // Button("Option 2") { /* future */ }
             } label: {
                 Label("Menu", systemImage: "line.horizontal.3")
@@ -398,5 +424,40 @@ struct HomeView: View {
             job.deletionDate = Date()
         }
         try? modelContext.save()
+    }
+}
+
+// MARK: - iPhone Empty State Bubble
+
+private struct iPhoneEmptyState: View {
+    let glassOn: Bool
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "folder")
+                .font(.system(size: 44, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
+
+            Text("Select the + to create a new stack.")
+                .font(.headline)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 24)
+        }
+        .padding(24)
+        .background(bubbleBackground)
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(.white.opacity(0.08)))
+        .padding(24)
+    }
+
+    @ViewBuilder
+    private var bubbleBackground: some View {
+        if #available(iOS 26.0, *), glassOn {
+            Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 16))
+        } else {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        }
     }
 }

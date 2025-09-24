@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 struct SettingsView: View {
     @AppStorage("isDarkMode") private var isDarkMode = false
@@ -6,7 +7,9 @@ struct SettingsView: View {
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real Liquid Glass (iOS 26+)
 
     @Environment(\.horizontalSizeClass) private var hSize
-    @State private var showDonateSheet = false
+
+    // StoreKit
+    @StateObject private var store = DonationStore()
 
     // Convenience flags
     private var useBetaGlass: Bool {
@@ -18,7 +21,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                // Adaptive two-column on iPad, one-column on iPhone
                 let columns: [GridItem] = [
                     GridItem(.adaptive(minimum: 360, maximum: 520), spacing: 16, alignment: .top)
                 ]
@@ -32,7 +34,6 @@ struct SettingsView: View {
 
                         Toggle("Dark Mode", isOn: $isDarkMode)
 
-                        // Classic glass (SDK-safe), mutually exclusive with Beta
                         Toggle("Liquid Glass (Classic)", isOn:
                             Binding(
                                 get: { isLiquidGlassEnabled },
@@ -43,7 +44,6 @@ struct SettingsView: View {
                             )
                         )
 
-                        // Real Liquid Glass (iOS 26+), mutually exclusive with Classic
                         if #available(iOS 26.0, *) {
                             Toggle("Liquid Glass (Beta, iOS 26+)", isOn:
                                 Binding(
@@ -68,21 +68,26 @@ struct SettingsView: View {
 
                         Link("Bug Submission", destination: URL(string: "mailto:coldcodebliss@gmail.com")!)
 
-                        if #available(iOS 26.0, *), useBetaGlass {
-                            Button("Donate") { showDonateSheet = true }
-                                .buttonStyle(.glass)
-                        } else if useClassicGlass {
-                            Button("Donate") { showDonateSheet = true }
-                                .frame(maxWidth: .infinity)
-                                .padding(10)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                                .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity(0.1)))
-                        } else {
-                            Button("Donate") { showDonateSheet = true }
-                                .frame(maxWidth: .infinity)
-                                .padding(10)
-                                .background(Color.blue.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
-                                .foregroundStyle(.white)
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Support the Developer")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+
+                            if store.isLoading && store.products.isEmpty {
+                                ProgressView().padding(.vertical, 4)
+                            }
+
+                            HStack(spacing: 10) {
+                                ForEach(store.products, id: \.id) { product in
+                                    donateButton(for: product, useBetaGlass: useBetaGlass, useClassicGlass: useClassicGlass)
+                                }
+                            }
+
+                            if let msg = store.lastMessage {
+                                Text(msg)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
 
@@ -94,29 +99,52 @@ struct SettingsView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .frame(maxWidth: 1100) // nicer margins on iPad
+                .frame(maxWidth: 1100)
                 .frame(maxWidth: .infinity)
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showDonateSheet) {
-                DonateSheet()
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
-            }
-            // Resolve legacy state if both were ON previously
+            .task { await store.load() }
             .onAppear {
                 if isBetaGlassEnabled && isLiquidGlassEnabled {
-                    // Prefer Beta when both are true
                     isLiquidGlassEnabled = false
                 }
             }
         }
     }
+
+    // MARK: - Donate button style picker
+    @ViewBuilder
+    private func donateButton(for product: Product, useBetaGlass: Bool, useClassicGlass: Bool) -> some View {
+        Button {
+            Task { await store.purchase(product) }
+        } label: {
+            Text(product.displayPrice) // shows $5.00, $10.00, etc.
+                .font(.body.weight(.semibold))
+                .frame(minWidth: 68)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            Group {
+                if #available(iOS 26.0, *), useBetaGlass {
+                    Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 12))
+                } else if useClassicGlass {
+                    RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial)
+                } else {
+                    RoundedRectangle(cornerRadius: 12).fill(Color.blue.opacity(0.85))
+                }
+            }
+        )
+        .foregroundStyle((useBetaGlass || useClassicGlass) ? Color.primary : Color.white)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke((useBetaGlass || useClassicGlass) ? .white.opacity(0.08) : .clear, lineWidth: 1)
+        )
+    }
 }
 
-// MARK: - Glassy Section Card
-
+// MARK: - Glassy Section Card (unchanged)
 private struct SectionCard<Content: View>: View {
     var title: String? = nil
     let useBetaGlass: Bool
@@ -134,7 +162,7 @@ private struct SectionCard<Content: View>: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(cardBackground)  // glass vs classic vs solid
+        .background(cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
@@ -157,27 +185,5 @@ private struct SectionCard<Content: View>: View {
 
     private var borderColor: Color {
         useBetaGlass || useClassicGlass ? .white.opacity(0.10) : .black.opacity(0.06)
-    }
-}
-
-// MARK: - Donate sheet (unchanged)
-
-private struct DonateSheet: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Support Development").font(.title2.bold())
-            Text("If you find value in nexusStack, consider a small donation. Thank you!")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-
-            Link("Open Venmo", destination: URL(string: "https://venmo.com/u/nexusStack")!)
-                .font(.body)
-                .padding()
-                .background(Color.blue.opacity(0.8))
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        .padding()
-        .frame(maxWidth: 520) // nice width on iPad
     }
 }

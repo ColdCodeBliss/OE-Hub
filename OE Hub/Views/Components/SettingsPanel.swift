@@ -1,11 +1,5 @@
-//
-//  SettingsPanel.swift
-//  OE Hub
-//
-//  Created by Ryan Bliss on 9/10/25.
-//
-
 import SwiftUI
+import StoreKit
 
 struct SettingsPanel: View {
     @Binding var isPresented: Bool
@@ -13,11 +7,9 @@ struct SettingsPanel: View {
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real glass
-
-    // NEW: persists across launches; 0.0 (no glow) ... 1.0 (max glow)
     @AppStorage("betaWhiteGlowOpacity") private var betaWhiteGlowOpacity: Double = 0.60
 
-    @State private var showDonateSheet = false
+    @StateObject private var store = DonationStore()
 
     var body: some View {
         ZStack {
@@ -62,7 +54,7 @@ struct SettingsPanel: View {
                                         get: { isLiquidGlassEnabled },
                                         set: { newValue in
                                             isLiquidGlassEnabled = newValue
-                                            if newValue { isBetaGlassEnabled = false } // mutual exclusivity
+                                            if newValue { isBetaGlassEnabled = false }
                                         }
                                     )
                                 )
@@ -73,7 +65,7 @@ struct SettingsPanel: View {
                                             get: { isBetaGlassEnabled },
                                             set: { newValue in
                                                 isBetaGlassEnabled = newValue
-                                                if newValue { isLiquidGlassEnabled = false } // mutual exclusivity
+                                                if newValue { isLiquidGlassEnabled = false }
                                             }
                                         )
                                     )
@@ -83,7 +75,6 @@ struct SettingsPanel: View {
                                         .foregroundStyle(.secondary)
                                 }
 
-                                // NEW: Glow intensity slider — only when Beta Glass is ON (iOS 26+)
                                 if #available(iOS 26.0, *), isBetaGlassEnabled {
                                     VStack(alignment: .leading, spacing: 8) {
                                         HStack {
@@ -117,27 +108,32 @@ struct SettingsPanel: View {
                             VStack(alignment: .leading, spacing: 12) {
                                 Link("Bug Submission", destination: URL(string: "mailto:coldcodebliss@gmail.com")!)
 
-                                if #available(iOS 26.0, *), isBetaGlassEnabled {
-                                    Button("Donate") { showDonateSheet = true }
-                                        .buttonStyle(.glass)
-                                } else if isLiquidGlassEnabled {
-                                    Button("Donate") { showDonateSheet = true }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(10)
-                                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 10))
-                                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.1)))
-                                } else {
-                                    Button("Donate") { showDonateSheet = true }
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        .padding(10)
-                                        .background(Color.blue.opacity(0.85), in: RoundedRectangle(cornerRadius: 10))
-                                        .foregroundStyle(.white)
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text("Support the Developer")
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.secondary)
+
+                                    if store.isLoading && store.products.isEmpty {
+                                        ProgressView().padding(.vertical, 4)
+                                    }
+
+                                    HStack(spacing: 10) {
+                                        ForEach(store.products, id: \.id) { product in
+                                            donateButton(for: product)
+                                        }
+                                    }
+
+                                    if let msg = store.lastMessage {
+                                        Text(msg)
+                                            .font(.footnote)
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
+                                .padding(12)
+                                .background(cardBackground)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.08)))
                             }
-                            .padding(12)
-                            .background(cardBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.08)))
                         }
 
                         // About
@@ -164,10 +160,7 @@ struct SettingsPanel: View {
             .shadow(color: .black.opacity(0.35), radius: 28, y: 10)
             .padding(.horizontal, 16)
             .transition(.scale.combined(with: .opacity))
-        }
-        .sheet(isPresented: $showDonateSheet) {
-            DonateSheet()
-                .presentationDetents([.medium, .large])
+            .task { await store.load() }
         }
     }
 
@@ -179,7 +172,6 @@ struct SettingsPanel: View {
         } else if isLiquidGlassEnabled {
             RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
         } else {
-            // If neither glass mode is on, still look premium
             RoundedRectangle(cornerRadius: 20).fill(Color(.systemBackground))
         }
     }
@@ -195,23 +187,33 @@ struct SettingsPanel: View {
             RoundedRectangle(cornerRadius: 14).fill(Color(.secondarySystemBackground))
         }
     }
-}
 
-// Simple donate sheet used inside the panel
-private struct DonateSheet: View {
-    var body: some View {
-        VStack(spacing: 16) {
-            Text("Support Development").font(.title2.bold())
-            Text("If you find value in nexusStack, consider a small donation. Thank you!")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-            Link("Open Venmo", destination: URL(string: "https://venmo.com/u/nexusStack")!)
-                .font(.body)
-                .padding()
-                .background(Color.blue.opacity(0.8))
-                .foregroundStyle(.white)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+    // Donate button styled to match the panel
+    @ViewBuilder
+    private func donateButton(for product: Product) -> some View {
+        let glassOn = isBetaGlassEnabled
+        let classicOn = isLiquidGlassEnabled && !glassOn
+
+        Button {
+            Task { await store.purchase(product) }
+        } label: {
+            Text(product.displayPrice)
+                .font(.body.weight(.semibold))
+                .frame(minWidth: 74)
         }
-        .padding()
+        .padding(.vertical, 8).padding(.horizontal, 12)
+        .background(
+            Group {
+                if #available(iOS 26.0, *), glassOn {
+                    Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 12))
+                } else if classicOn {
+                    RoundedRectangle(cornerRadius: 12).fill(.ultraThinMaterial)
+                } else {
+                    RoundedRectangle(cornerRadius: 12).fill(Color.blue.opacity(0.85))
+                }
+            }
+        )
+        .foregroundStyle((glassOn || classicOn) ? Color.primary : Color.white)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.white.opacity((glassOn || classicOn) ? 0.08 : 0)))
     }
 }

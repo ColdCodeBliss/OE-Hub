@@ -1,9 +1,9 @@
 //
 //  GitHubBrowserView.swift
-//  OE Hub
+//  nexusStack / OE Hub
+//  Floating panel version matching SettingsPanel’s Liquid Glass
 //
-//  Created by Ryan Bliss on 9/13/25.
-//
+
 import SwiftUI
 import Foundation
 import UniformTypeIdentifiers
@@ -78,6 +78,7 @@ fileprivate enum GHService {
 
 struct GitHubBrowserView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var hSize
 
     /// Per-job UserDefaults key (namespaced by Job.repoBucketKey via caller)
     let recentKey: String
@@ -86,6 +87,11 @@ struct GitHubBrowserView: View {
 
     // MARK: Persistence via @AppStorage (dynamic key)
     @AppStorage private var recentReposJSON: String
+
+    // Appearance flags (match SettingsPanel / CLV)
+    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
+    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
+    @AppStorage("betaWhiteGlowOpacity") private var betaWhiteGlowOpacity: Double = 0.60
 
     // Input
     @State private var repoURLString: String = ""
@@ -117,137 +123,310 @@ struct GitHubBrowserView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if repo == nil {
-                    // URL entry
-                    VStack(spacing: 16) {
-                        Text("Load a public GitHub repository")
-                            .font(.headline)
+        GeometryReader { proxy in
+            let topInset    = proxy.safeAreaInsets.top
+            let bottomInset = proxy.safeAreaInsets.bottom
+            let dim         = (isBetaGlassEnabled ? 0.14 : 0.25)
 
-                        TextField("e.g. https://github.com/apple/swift", text: $repoURLString)
-                            .textFieldStyle(.roundedBorder)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled(true)
-                            .keyboardType(.URL)
-                            .padding(.horizontal)
+            ZStack {
+                // Backdrop dim
+                Color.black.opacity(dim).ignoresSafeArea()
 
-                        Button {
-                            Task { await loadFromURL() }
-                        } label: {
-                            Text("Load Repository")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(.blue.opacity(0.85))
-                                .foregroundStyle(.white)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
-                        .padding(.horizontal)
-
-                        // Recent per-job repos (centered under the URL field)
-                        if !recentRepos.isEmpty {
-                            VStack(alignment: .center, spacing: 8) {
-                                Text("Recent")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-
-                                CenteredWrap(spacing: 8) {
-                                    ForEach(recentRepos, id: \.self) { url in
-                                        Button {
-                                            repoURLString = url
-                                            Task { await loadFromURL() }
-                                        } label: {
-                                            HStack(spacing: 6) {
-                                                Image(systemName: "clock.arrow.circlepath")
-                                                Text(shortLabel(for: url))
-                                            }
-                                            .font(.caption)
-                                            .padding(.horizontal, 10)
-                                            .padding(.vertical, 6)
-                                            .background(Color.gray.opacity(0.15))
-                                            .clipShape(Capsule())
-                                        }
-                                        .buttonStyle(.plain)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity)   // give the layout full width to center rows
-                            }
-                            .padding(.horizontal)
-                        }
-
-                        if let err = errorMessage {
-                            Text(err).foregroundStyle(.red).font(.footnote)
-                                .padding(.horizontal)
-                        }
-
-                        Spacer()
-                    }
-                    .padding(.top, 24)
-                    .onAppear { loadRecents() }
-                } else {
-                    // Directory listing
-                    List {
-                        if !currentPath.isEmpty {
-                            Section {
-                                Button {
-                                    goUpOne()
-                                } label: {
-                                    Label("..", systemImage: "arrow.up.left")
-                                }
-                            }
-                        }
-
-                        ForEach(items) { item in
-                            HStack {
-                                Image(systemName: iconName(for: item))
-                                    .foregroundStyle(item.type == "dir" ? .yellow : .secondary)
-                                VStack(alignment: .leading) {
-                                    Text(item.name).font(.body)
-                                    Text(item.path).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                            }
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                Task { await handleTap(item) }
-                            }
-                        }
-                    }
-                    .overlay { if isLoading { ProgressView().scaleEffect(1.2) } }
-                }
+                // Floating glass panel
+                panel
+                    .frame(maxWidth: hSize == .regular ? 520 : .infinity)
+                    .background(panelBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .overlay(RoundedRectangle(cornerRadius: 20).stroke(.white.opacity(0.10), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.35), radius: 28, y: 10)
+                    .padding(.horizontal, 16)
+                    .modifier(BetaGlow(opacity: betaWhiteGlowOpacity))
+                    .transition(.scale.combined(with: .opacity))
+                    .padding(.top,    max(topInset, 12))
+                    .padding(.bottom, max(bottomInset, 12))
+                    .modifier(
+                        MaxHeightIfPositive(
+                            maxHeight: max(0, proxy.size.height - max(topInset, 12) - max(bottomInset, 12))
+                        )
+                    )
             }
-            .navigationTitle(repoTitle)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { dismiss() }
-                }
-                ToolbarItem(placement: .principal) {
-                    if let r = repo {
-                        Text("\(r.owner)/\(r.name)")
-                            .font(.subheadline.bold())
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    if repo != nil {
-                        Button {
-                            Task { await reloadCurrentFolder() }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        .disabled(isLoading)
-                    }
-                }
-            }
-            .sheet(isPresented: $showingFile) { filePreview }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+        .presentationBackground(.clear)
+        .onAppear(perform: loadRecents)
+        .sheet(isPresented: $showingFile) { filePreview }
+    }
+
+    // MARK: - Panel
+
+    private var panel: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().opacity(0.15)
+            ScrollView { content }
         }
     }
 
-    private var repoTitle: String {
-        if let r = repo { return r.name }
-        return "GitHub"
+    private var header: some View {
+        HStack(spacing: 12) {
+            Button("Close") { dismiss() }
+                .font(.callout.weight(.semibold))
+
+            Spacer()
+
+            Text(repoTitle)
+                .font(.headline)
+
+            Spacer()
+
+            if repo != nil {
+                Button {
+                    Task { await reloadCurrentFolder() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .disabled(isLoading)
+            }
+        }
+        .padding(12)
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // URL entry + Recents
+            urlEntryCard
+
+            // Error
+            if let err = errorMessage {
+                Text(err)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 4)
+                    .transition(.opacity)
+            }
+
+            // Directory listing
+            if repo != nil {
+                directoryCard
+            }
+        }
+        .padding(16)
+        .onDrop(of: [.url, .text], isTargeted: nil, perform: handleDrop(_:))
+    }
+
+    // MARK: - Cards
+
+    private var urlEntryCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Load a public GitHub repository")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            TextField("e.g. https://github.com/apple/swift", text: $repoURLString)
+                .textFieldStyle(.plain)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled(true)
+                .keyboardType(.URL)
+                .padding(10)
+                .background(cardRowBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.1)))
+
+            loadButton
+
+            if !recentRepos.isEmpty {
+                VStack(alignment: .center, spacing: 8) {
+                    Text("Recent")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    CenteredWrap(spacing: 8) {
+                        ForEach(recentRepos, id: \.self) { url in
+                            Button {
+                                repoURLString = url
+                                Task { await loadFromURL() }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                    Text(shortLabel(for: url))
+                                }
+                                .font(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(chipBackground)
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(12)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.08)))
+    }
+
+    private var directoryCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Path header
+            if !currentPath.isEmpty {
+                Button {
+                    goUpOne()
+                } label: {
+                    Label("..", systemImage: "arrow.up.left")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(10)
+                .background(cardRowBackground)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.08)))
+            }
+
+            // Items
+            if isLoading {
+                ProgressView().frame(maxWidth: .infinity, alignment: .center).padding(.vertical, 20)
+            } else {
+                LazyVStack(spacing: 8) {
+                    ForEach(items) { item in
+                        HStack(spacing: 10) {
+                            Image(systemName: iconName(for: item))
+                                .foregroundStyle(item.type == "dir" ? .yellow : .secondary)
+                            VStack(alignment: .leading) {
+                                Text(item.name).font(.body)
+                                Text(item.path).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture { Task { await handleTap(item) } }
+                        .padding(10)
+                        .background(cardRowBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.08)))
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(cardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.08)))
+    }
+
+    // MARK: - Buttons
+
+    private var loadButton: some View {
+        Group {
+            if #available(iOS 26.0, *), isBetaGlassEnabled {
+                Button("Load Repository") { Task { await loadFromURL() } }
+                    .buttonStyle(.glass)
+                    .disabled(repoURLString.isEmpty)
+            } else if isLiquidGlassEnabled {
+                Button("Load Repository") { Task { await loadFromURL() } }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(.white.opacity(0.1)))
+                    .disabled(repoURLString.isEmpty)
+            } else {
+                Button("Load Repository") { Task { await loadFromURL() } }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.blue.opacity(0.85)))
+                    .foregroundStyle(.white)
+                    .disabled(repoURLString.isEmpty)
+            }
+        }
+    }
+
+    // MARK: - Backgrounds
+
+    @ViewBuilder
+    private var panelBackground: some View {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
+            Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 20))
+        } else if isLiquidGlassEnabled {
+            RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial)
+        } else {
+            RoundedRectangle(cornerRadius: 20).fill(Color(.systemBackground))
+        }
+    }
+
+    @ViewBuilder
+    private var cardBackground: some View {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
+            Color.clear.glassEffect(.clear, in: .rect(cornerRadius: 14))
+        } else if isLiquidGlassEnabled {
+            RoundedRectangle(cornerRadius: 14).fill(.ultraThinMaterial)
+        } else {
+            RoundedRectangle(cornerRadius: 14).fill(Color(.secondarySystemBackground))
+        }
+    }
+
+    @ViewBuilder
+    private var cardRowBackground: some View {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
+            Color.white.opacity(0.06)
+        } else if isLiquidGlassEnabled {
+            RoundedRectangle(cornerRadius: 10).fill(.ultraThinMaterial)
+        } else {
+            RoundedRectangle(cornerRadius: 10).fill(Color(.tertiarySystemBackground))
+        }
+    }
+
+    @ViewBuilder
+    private var chipBackground: some View {
+        if #available(iOS 26.0, *), isBetaGlassEnabled {
+            Color.white.opacity(0.08)
+        } else if isLiquidGlassEnabled {
+            Color.gray.opacity(0.15)
+        } else {
+            Color.gray.opacity(0.15)
+        }
+    }
+
+    private struct BetaGlow: ViewModifier {
+        @Environment(\.colorScheme) private var scheme
+        let opacity: Double
+        func body(content: Content) -> some View {
+            content.shadow(color: scheme == .dark ? .white.opacity(opacity) : .clear,
+                           radius: 10, x: 0, y: 0)
+        }
     }
 
     // MARK: - Actions
+
+    private var repoTitle: String {
+        if let r = repo { return "\(r.owner)/\(r.name)" }
+        return "GitHub"
+    }
+
+    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
+        if let item = providers.first {
+            _ = item.loadObject(ofClass: URL.self) { url, _ in
+                if let url {
+                    Task {
+                        await MainActor.run {
+                            repoURLString = url.absoluteString
+                            Task { await loadFromURL() }
+                        }
+                    }
+                }
+            }
+            item.loadItem(forTypeIdentifier: UTType.text.identifier, options: nil) { data, _ in
+                if let d = data as? Data, let s = String(data: d, encoding: .utf8) {
+                    Task { await MainActor.run {
+                        repoURLString = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                        Task { await loadFromURL() }
+                    } }
+                }
+            }
+        }
+        return true
+    }
 
     private func loadFromURL() async {
         errorMessage = nil
@@ -356,9 +535,7 @@ struct GitHubBrowserView: View {
         arr.removeAll { $0.caseInsensitiveCompare(url) == .orderedSame }
         arr.insert(url, at: 0)
         // Cap
-        if arr.count > maxRecents {
-            arr = Array(arr.prefix(maxRecents))
-        }
+        if arr.count > maxRecents { arr = Array(arr.prefix(maxRecents)) }
         recentRepos = arr
         recentReposJSON = encodeRecent(arr)
     }
@@ -397,9 +574,7 @@ struct GitHubBrowserView: View {
     private func shortLabel(for urlString: String) -> String {
         guard let url = URL(string: urlString) else { return urlString }
         let comps = url.path.split(separator: "/").map(String.init)
-        if comps.count >= 2 {
-            return "\(comps[0])/\(comps[1])"
-        }
+        if comps.count >= 2 { return "\(comps[0])/\(comps[1])" }
         return urlString.replacingOccurrences(of: "https://", with: "")
     }
 
@@ -418,7 +593,6 @@ struct GitHubBrowserView: View {
     }
 
     private func isProbablyText(_ data: Data) -> Bool {
-        // Heuristic: if it decodes as UTF-8 without nils, treat as text
         if let _ = String(data: data, encoding: .utf8) { return true }
         return false
     }
@@ -466,9 +640,7 @@ struct GitHubBrowserView: View {
             }
             .navigationTitle(fileTitle)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close") { showingFile = false }
-                }
+                ToolbarItem(placement: .topBarLeading) { Button("Close") { showingFile = false } }
                 ToolbarItem(placement: .topBarTrailing) {
                     if let url = fileDownloadURL {
                         ShareLink(item: url) { Image(systemName: "square.and.arrow.up") }
@@ -486,20 +658,12 @@ struct GitHubBrowserView: View {
 fileprivate struct CenteredWrap: Layout {
     var spacing: CGFloat = 8
 
-    func sizeThatFits(
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let maxWidth = proposal.width ?? 0
         guard maxWidth > 0 else {
-            // Fallback if no width proposed
-            let totalHeight = subviews
-                .map { $0.sizeThatFits(.unspecified).height }
-                .reduce(0, +) + spacing * max(0, CGFloat(subviews.count - 1))
-            let maxW = subviews
-                .map { $0.sizeThatFits(.unspecified).width }
-                .max() ?? 0
+            let totalHeight = subviews.map { $0.sizeThatFits(.unspecified).height }.reduce(0, +)
+                + spacing * max(0, CGFloat(subviews.count - 1))
+            let maxW = subviews.map { $0.sizeThatFits(.unspecified).width }.max() ?? 0
             return CGSize(width: maxW, height: totalHeight)
         }
 
@@ -522,20 +686,12 @@ fileprivate struct CenteredWrap: Layout {
             }
         }
 
-        if currentRowWidth > 0 {
-            totalHeight += currentRowHeight
-            hasAny = true
-        }
+        if currentRowWidth > 0 { totalHeight += currentRowHeight; hasAny = true }
         if !hasAny { totalHeight = 0 }
         return CGSize(width: maxWidth, height: totalHeight)
     }
 
-    func placeSubviews(
-        in bounds: CGRect,
-        proposal: ProposedViewSize,
-        subviews: Subviews,
-        cache: inout ()
-    ) {
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let maxWidth = bounds.width
         guard maxWidth > 0 else { return }
 
@@ -564,9 +720,7 @@ fileprivate struct CenteredWrap: Layout {
         // Center each row
         var y = bounds.minY
         for r in rows {
-            let rWidth = r.reduce(0) { partial, pair in
-                partial == 0 ? pair.1.width : partial + spacing + pair.1.width
-            }
+            let rWidth = r.reduce(0) { partial, pair in partial == 0 ? pair.1.width : partial + spacing + pair.1.width }
             let rHeight = r.map { $0.1.height }.max() ?? 0
             var x = bounds.minX + (maxWidth - rWidth) / 2
 
@@ -578,6 +732,19 @@ fileprivate struct CenteredWrap: Layout {
                 x += size.width + spacing
             }
             y += rHeight + spacing
+        }
+    }
+}
+
+// MARK: - Safe height clamp
+
+private struct MaxHeightIfPositive: ViewModifier {
+    let maxHeight: CGFloat
+    func body(content: Content) -> some View {
+        if maxHeight > 0, maxHeight.isFinite {
+            content.frame(maxHeight: maxHeight)
+        } else {
+            content
         }
     }
 }
