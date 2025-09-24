@@ -27,6 +27,8 @@ struct HomeView: View {
     @State private var selectedJob: Job?
     @State private var showColorPicker = false
     @State private var showSettings = false
+    @State private var showHelp = false
+
 
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
@@ -140,6 +142,21 @@ struct HomeView: View {
                     if showSettings && isBetaGlassEnabled {
                         SettingsPanel(isPresented: $showSettings)
                             .zIndex(2)
+                    }
+                }
+                // Help as sheet when Beta OFF
+                .sheet(isPresented: Binding(
+                    get: { showHelp && !isBetaGlassEnabled },
+                    set: { if !$0 { showHelp = false } }
+                )) {
+                    HelpView()
+                }
+
+                // Help as floating glass panel when Beta ON
+                .overlay {
+                    if showHelp && isBetaGlassEnabled {
+                        HelpPanel(isPresented: $showHelp)
+                            .zIndex(3)
                     }
                 }
             }
@@ -310,7 +327,7 @@ struct HomeView: View {
         ToolbarItem(placement: .topBarLeading) {
             Menu {
                 Button("Settings") { showSettings = true }
-               // Button("Option 1") { /* future */ }
+                Button("Help") { showHelp = true }
                // Button("Option 2") { /* future */ }
             } label: {
                 Label("Menu", systemImage: "line.horizontal.3")

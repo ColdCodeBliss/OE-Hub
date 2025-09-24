@@ -8,14 +8,11 @@ struct HelpPanel: View {
 
     var body: some View {
         ZStack {
-            // Dimmed backdrop; tap outside to dismiss
             Color.black.opacity(0.25)
                 .ignoresSafeArea()
                 .onTapGesture { withAnimation { isPresented = false } }
 
-            // Floating panel
             VStack(spacing: 0) {
-                // Header
                 HStack {
                     Text("Help & Quick Tips")
                         .font(.headline)
@@ -57,8 +54,23 @@ struct HelpPanel: View {
                                        text: "Plan deliverables and reminders. Tap a card’s left side to rename. Swipe to complete, color, or delete.")
                                 tipRow(icon: "checkmark.square", title: "Checklist",
                                        text: "Lightweight to-dos per stack.")
-                                tipRow(icon: "point.topleft.down.curvedto.point.bottomright.up", title: "Mind Map",
-                                       text: "Pinch to zoom, drag canvas to pan. Drag nodes gently—sensitivity has been reduced for precision.")
+                                // Mind Map + indented sub-tips
+                                VStack(alignment: .leading, spacing: 6) {
+                                    tipRow(icon: "point.topleft.down.curvedto.point.bottomright.up",
+                                           title: "Mind Map",
+                                           text: "Pinch to zoom, drag canvas to pan. Drag nodes gently—sensitivity is tuned for precision.")
+                                    // Indented mini-tips block
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        subTipRow(icon: "wand.and.stars",
+                                                  title: "Wand & Stars",
+                                                  text: "Auto-arranges the map to tidy spacing and layout for a cleaner view.")
+                                        subTipRow(icon: "target",
+                                                  title: "Target",
+                                                  text: "Re-centers the canvas on the root node so you can quickly find your map.")
+                                    }
+                                    .padding(.leading, 22) // slight visual indent to show these belong to Mind Map
+                                }
+
                                 tipRow(icon: "note.text", title: "Notes",
                                        text: "Rich text editor with bold, underline, strikethrough, and bullets. Auto-bullets on Return.")
                                 tipRow(icon: "info.circle", title: "Info",
@@ -150,6 +162,20 @@ struct HelpPanel: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.subheadline.weight(.semibold))
                 Text(text).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // NEW: small, indented sub-tip row used under “Mind Map”
+    private func subTipRow(icon: String, title: String, text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.callout)
+                .frame(width: 16)
+                .opacity(0.9)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.callout.weight(.semibold))
+                Text(text).font(.callout).foregroundStyle(.secondary)
             }
         }
     }
