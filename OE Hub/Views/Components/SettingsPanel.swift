@@ -8,6 +8,8 @@ struct SettingsPanel: View {
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real glass
     @AppStorage("betaWhiteGlowOpacity") private var betaWhiteGlowOpacity: Double = 0.60
+    @AppStorage("isTrueStackEnabled") private var isTrueStackEnabled = false
+
 
     @StateObject private var store = DonationStore()
 
@@ -92,6 +94,12 @@ struct SettingsPanel: View {
                                     .padding(.top, 4)
                                     .transition(.opacity.combined(with: .move(edge: .top)))
                                 }
+                                
+                                if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                    Toggle("True Stack (Card Deck UI)", isOn: $isTrueStackEnabled)
+                                        .tint(.blue)
+                                }
+
                             }
                             .padding(12)
                             .background(cardBackground)

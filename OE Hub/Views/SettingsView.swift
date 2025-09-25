@@ -5,6 +5,8 @@ struct SettingsView: View {
     @AppStorage("isDarkMode") private var isDarkMode = false
     @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false   // Classic (fallback)
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false       // Real Liquid Glass (iOS 26+)
+    @AppStorage("isTrueStackEnabled") private var isTrueStackEnabled = false
+
 
     @Environment(\.horizontalSizeClass) private var hSize
 
@@ -59,6 +61,12 @@ struct SettingsView: View {
                                 .disabled(true)
                                 .foregroundStyle(.secondary)
                         }
+                        
+                        if #available(iOS 26.0, *), isBetaGlassEnabled {
+                            Toggle("True Stack (Card Deck UI)", isOn: $isTrueStackEnabled)
+                                .tint(.blue)
+                        }
+
                     }
 
                     // MARK: Support
