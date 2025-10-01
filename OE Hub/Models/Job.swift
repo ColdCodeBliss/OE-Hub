@@ -30,15 +30,11 @@ final class Job {
     var roleTitle: String?
     var equipmentList: String?
     var jobType: String? = "Full-time"     // Stored string; see `type` wrapper below.
-
     var contractEndDate: Date?
 
-    // Existing color string (kept for full backward-compat)
-    var colorCode: String? = "green"
-
-    // NEW: numeric color index for True Stack & future UI (0-based palette index)
-    // Will be kept in sync with `colorCode` via the computed accessors below.
-    var colorIndex: Int = 3 // 3 == "green" in the ordered palette below
+    // Color (backward compatible)
+    var colorCode: String? = "green"       // legacy string still read/written
+    var colorIndex: Int = 3                // unified numeric color (3 == "green")
 
     // Stable namespace for per-job settings (recent repos, etc.)
     var repoBucketKey: String = UUID().uuidString
@@ -46,7 +42,7 @@ final class Job {
     init(title: String) {
         self.title = title
         self.creationDate = Date()
-        // make sure colorIndex matches colorCode default
+        // ensure numeric matches the string default
         self.colorIndex = Job.ColorCode.defaultIndex
     }
 }
@@ -57,10 +53,10 @@ extension Job {
     /// Ordered palette used across the app. Index = visual tint index.
     enum ColorCode: String, CaseIterable {
         case gray, red, blue, green, purple, orange, yellow, teal, brown
-        // If you later expand the palette, add cases at the end to keep
-        // existing indices stable.
 
-        static let ordered: [ColorCode] = [.gray, .red, .blue, .green, .purple, .orange, .yellow, .teal, .brown]
+        static let ordered: [ColorCode] = [
+            .gray, .red, .blue, .green, .purple, .orange, .yellow, .teal, .brown
+        ]
 
         static var defaultIndex: Int {
             // Our stored default string is "green"
@@ -68,7 +64,7 @@ extension Job {
         }
 
         static func index(for raw: String?) -> Int {
-            let key = raw?.lowercased() ?? "green"
+            let key = (raw ?? "green").lowercased()
             if let cc = ColorCode(rawValue: key),
                let idx = ordered.firstIndex(of: cc) {
                 return idx
@@ -77,7 +73,7 @@ extension Job {
         }
 
         static func name(for index: Int) -> String {
-            let idx = (index >= 0 && index < ordered.count) ? index : defaultIndex
+            let idx = (0..<ordered.count).contains(index) ? index : defaultIndex
             return ordered[idx].rawValue
         }
     }
@@ -97,11 +93,9 @@ extension Job {
     /// Type-safe accessors that read/write your stored strings and keep `colorIndex` in sync.
     var color: ColorCode {
         get {
-            // If colorIndex looks valid, prefer it (fast path).
             if (0..<ColorCode.ordered.count).contains(colorIndex) {
                 return ColorCode.ordered[colorIndex]
             }
-            // Otherwise derive from colorCode string and also repair colorIndex.
             let idx = ColorCode.index(for: colorCode)
             colorIndex = idx
             return ColorCode.ordered[idx]
@@ -126,7 +120,7 @@ extension Job {
         set {
             let idx = max(0, min(newValue, ColorCode.ordered.count - 1))
             colorIndex = idx
-            colorCode = ColorCode.name(for: idx)
+            colorCode  = ColorCode.name(for: idx)
         }
     }
 
@@ -140,13 +134,20 @@ extension Job {
         set { payType = newValue.rawValue }
     }
 
-    /// Handy derived metric for lists & badges (kept out of storage).
+    /// Derived metric for lists & badges (not stored).
     var activeItemsCount: Int {
         deliverables.filter { !$0.isCompleted }.count
         + checklistItems.filter { !$0.isCompleted }.count
     }
 
-    /// Convenience for cycling color (used by True Stack context menu, etc.)
+    /// Convenience: set both colorIndex & colorCode in one call.
+    func setColor(index: Int) {
+        let idx = max(0, min(index, ColorCode.ordered.count - 1))
+        colorIndex = idx
+        colorCode  = ColorCode.name(for: idx)
+    }
+
+    /// Convenience for cycling color (used by context menus, etc.)
     func cycleColorForward() {
         let next = (effectiveColorIndex + 1) % ColorCode.ordered.count
         effectiveColorIndex = next

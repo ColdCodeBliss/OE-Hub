@@ -24,11 +24,14 @@ extension View {
     }
 }
 
-func color(for code: Int) -> Color {
-    // Reuse your existing palette; this is a safe fallback
-    let palette: [Color] = [.blue, .purple, .pink, .mint, .orange, .teal, .indigo, .red, .green, .cyan, .yellow, .brown]
-    return palette[abs(code) % palette.count]
+func color(for index: Int) -> Color {
+    let count = Job.ColorCode.ordered.count
+    let clamped = max(0, min(index, count - 1))
+    let name = Job.ColorCode.name(for: clamped)
+    return color(for: name)   // calls your String? → Color mapper in Utilities.swift
 }
+
+
 
 func tsFormattedDate(_ date: Date) -> String {
     let df = DateFormatter()

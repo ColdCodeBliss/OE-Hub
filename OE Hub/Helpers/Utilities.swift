@@ -18,14 +18,15 @@ import UIKit
 @inlinable
 func color(for colorCode: String?) -> Color {
     switch colorCode?.lowercased() {
+    case "gray":   return .gray
     case "red":    return .red
     case "blue":   return .blue
     case "green":  return .green
-    case "yellow": return .yellow
-    case "orange": return .orange
     case "purple": return .purple
-    case "brown":   return .brown
+    case "orange": return .orange
+    case "yellow": return .yellow
     case "teal":   return .teal
+    case "brown":  return .brown
     default:       return .gray
     }
 }

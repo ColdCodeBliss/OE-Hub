@@ -16,7 +16,7 @@ struct JobRowView: View {
     private let radius: CGFloat = 20
 
     var body: some View {
-        let tint = color(for: job.colorCode)
+        let tint = color(for: job.effectiveColorIndex)
 
         VStack(alignment: .leading, spacing: 8) {
             Text(job.title)
