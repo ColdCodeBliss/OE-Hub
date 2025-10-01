@@ -1,36 +1,30 @@
-//
-//  TrueStackDeckView.swift
-//  OE Hub
-//
-//  Updated for unified card sizing, no borders, top card straight, and safe insets.
-//
-
 import SwiftUI
 import SwiftData
 
 @available(iOS 26.0, *)
 struct TrueStackDeckView: View {
-    // Input — use the same models you already query in HomeView
     let jobs: [Job]
 
-    // Environment (so we can rename/delete without changing your HomeView plumbing)
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
 
-    // Style flags
-    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
-    @AppStorage("isTrueStackEnabled")   private var isTrueStackEnabled   = false
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
+    @AppStorage("isTrueStackEnabled") private var isTrueStackEnabled = false
 
-    // UI state
+    // NEW: settings presentation
+    @State private var showSettings = false
+
+    // Deck state
     @State private var deck: [Job] = []
-    @State private var dragTranslation: CGFloat = 0
-    @State private var isDragging = false
+    @State private var containerSize: CGSize = .zero
+    @State private var dragProgress: Double = 0.0
+    @State private var selectedIndex: Int = 0
 
     // Expanded
     @State private var expandedJob: Job? = nil
     @Namespace private var deckNS
 
-    // Sheets/panels launched from expanded view buttons
+    // Launchers from expanded view
     @State private var showGitHub = false
     @State private var showConfluence = false
     @State private var showDue = false
@@ -45,35 +39,24 @@ struct TrueStackDeckView: View {
     @State private var jobForContext: Job? = nil
     @State private var showDeleteConfirm = false
 
-    // Layout (tuned to keep rotated cards inside screen)
-    private let cardHorizontalMargin: CGFloat = 60     // side gutter so tilt never clips
-    private let topHeightRatio: CGFloat = 0.66         // card height vs screen height
-    private let stackDepth = 6                         // visible layers
-    private let tiltDegrees: CGFloat = 2.5               // tilt for non-top cards only
-    private let layerOffsetY: CGFloat = 11             // vertical fan
-    private let swipeThreshold: CGFloat = 90           // px to complete a swipe
-    private let nonTopOpacity: Double = 0.96           // shared opacity for all non-top cards
-
-    init(jobs: [Job]) { self.jobs = jobs }
+    // Layout
+    private let cardCorner: CGFloat = 22
+    private let cardHorizontalMargin: CGFloat = 18
+    private let topHeightRatio: CGFloat = 0.66
+    private let maxCardHeight: CGFloat = 560
 
     var body: some View {
         GeometryReader { geo in
-            // Single, unified card size (accounts for rotation so corners never clip)
             let safeW = geo.size.width - (cardHorizontalMargin * 2)
-            let baseH = min(geo.size.height * topHeightRatio, 560)
-
-            // Rotated width: W*cosθ + H*sinθ <= safeW  ⇒ choose W accordingly
-            let theta = abs(tiltDegrees) * .pi / 180
-            let cosT  = cos(theta)
-            let sinT  = sin(theta)
-
-            // Solve for W; guard against tiny/negative values and cos=0
-            let maxWFromRotation = max(200, (safeW - baseH * sinT) / max(cosT, 0.0001))
-            let baseW = min(safeW, maxWFromRotation)
-
+            let baseH = min(geo.size.height * topHeightRatio, maxCardHeight)
+            let theta = CGFloat(2.5) * .pi / 180
+            let baseW = min(
+                safeW,
+                (safeW - baseH * sin(theta)) / max(cos(theta), 0.0001)
+            )
 
             ZStack {
-                // Background shimmer to match your app’s vibe
+                // backdrop
                 LinearGradient(
                     colors: [.white.opacity(colorScheme == .dark ? 0.02 : 0.06), .clear],
                     startPoint: .top,
@@ -83,13 +66,26 @@ struct TrueStackDeckView: View {
 
                 // Deck
                 ZStack {
-                    ForEach(Array(deck.prefix(stackDepth).enumerated()), id: \.element.persistentModelID) { (idx, job) in
-                        card(job: job, index: idx, size: CGSize(width: baseW, height: baseH))
+                    ForEach(Array(deck.enumerated()), id: \.element.persistentModelID) { (i, job) in
+                        card(job: job, index: i, size: CGSize(width: baseW, height: baseH))
+                            .zIndex(zIndex(for: i))
+                            .offset(x: xOffset(for: i))
+                            .scaleEffect(scale(for: i))
+                            .rotationEffect(.degrees(rotation(for: i)))
+                            .shadow(color: shadow(for: i), radius: 30, y: 20)
+                            .matchedGeometryEffect(id: job.persistentModelID, in: deckNS)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, cardHorizontalMargin)  // ensure fully on-screen
-                .clipped() // ⬅️ ensure nothing renders past the container
+                .padding(.horizontal, cardHorizontalMargin)
+                .contentShape(Rectangle())
+                .gesture(dragGesture(width: geo.size.width))
+                .onChange(of: selectedIndex) { _, newValue in
+                    let maxIdx = max(0, deck.count - 1)
+                    let clamped = min(max(0, newValue), maxIdx)
+                    if clamped != newValue { selectedIndex = clamped }
+                }
+                .background(SizeReader { size in containerSize = size })
 
                 // Expanded overlay
                 if let selected = expandedJob {
@@ -111,10 +107,47 @@ struct TrueStackDeckView: View {
                     .transition(.scale.combined(with: .opacity))
                     .zIndex(10)
                 }
-            }
-            .task { deck = jobs } // Initialize deck (top = first)
 
-            // MARK: Launches from expanded buttons (reuse your existing views)
+                // NEW: floating hamburger (works even if no nav bar shown)
+                VStack {
+                    HStack {
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Image(systemName: "line.horizontal.3")
+                                .font(.title3.weight(.semibold))
+                                .padding(10)
+                        }
+                        .background(
+                            Group {
+                                if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                    Color.clear.glassEffect(.regular, in: .capsule)
+                                } else {
+                                    Capsule().fill(.ultraThinMaterial)
+                                }
+                            }
+                        )
+                        .overlay(Capsule().stroke(.white.opacity(0.10), lineWidth: 1))
+                        .clipShape(Capsule())
+                        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+
+                    Spacer()
+                }
+                .allowsHitTesting(expandedJob == nil) // avoid overlaps while expanded
+                .zIndex(11)
+            }
+            .navigationTitle("") // keep nav bar slim if present
+            .task {
+                deck = jobs
+                selectedIndex = 0
+            }
+
+            // Launches from expanded buttons (reuse your flows)
             .sheet(isPresented: $showDue) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
             .sheet(isPresented: $showChecklist) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
             .sheet(isPresented: $showMindMap) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
@@ -127,7 +160,21 @@ struct TrueStackDeckView: View {
                 if let j = expandedJob { ConfluenceLinksView(storageKey: "confluenceLinks.\(j.repoBucketKey)", maxLinks: 5) }
             }
 
-            // Rename + Delete
+            // NEW: Settings presentation (mirrors the rest of the app)
+            .sheet(isPresented: Binding(
+                get: { showSettings && !isBetaGlassEnabled },
+                set: { if !$0 { showSettings = false } }
+            )) {
+                SettingsView()
+            }
+            .overlay {
+                if showSettings && isBetaGlassEnabled {
+                    SettingsPanel(isPresented: $showSettings)
+                        .zIndex(20)
+                }
+            }
+
+            // Alerts
             .alert("Rename Stack", isPresented: $showRenameAlert) {
                 TextField("Title", text: $pendingRenameText)
                 Button("Cancel", role: .cancel) { jobForContext = nil }
@@ -145,49 +192,36 @@ struct TrueStackDeckView: View {
                     if let j = jobForContext {
                         modelContext.delete(j)
                         try? modelContext.save()
-                        removeFromDeck(j)
+                        deck.removeAll { $0.persistentModelID == j.persistentModelID }
+                        selectedIndex = min(selectedIndex, max(0, deck.count - 1))
                     }
                     jobForContext = nil
                 }
             } message: { Text("This action cannot be undone.") }
         }
-    }
-
-    // MARK: - Card
-
-    private func card(job: Job, index idx: Int, size: CGSize) -> some View {
-        let isTop = idx == 0
-        let tiltSign: CGFloat = (idx % 2 == 0) ? 1 : -1
-
-        let drag = DragGesture(minimumDistance: 8)
-            .onChanged { value in
-                guard isTop, expandedJob == nil else { return }
-                isDragging = true
-                dragTranslation = value.translation.width
-            }
-            .onEnded { value in
-                guard isTop, expandedJob == nil else { return }
-                isDragging = false
-                let x = value.translation.width
-                if abs(x) > swipeThreshold {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                        sendTopCardToBack()
-                        dragTranslation = 0
-                    }
-                } else {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                        dragTranslation = 0
-                    }
+        // Also provide a nav-bar hamburger if this sits inside a NavigationStack
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    showSettings = true
+                } label: {
+                    Label("Menu", systemImage: "line.horizontal.3")
                 }
             }
+        }
+    }
+
+    // MARK: - Card content
+
+    private func card(job: Job, index i: Int, size: CGSize) -> some View {
+        let isTop = (i == selectedIndex)
 
         return ZStack {
-            // Glass card body — single layer, no inner border stroke
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
                 .fill(.clear)
                 .frame(width: size.width, height: size.height)
                 .glassEffect(.regular.tint(color(for: job.effectiveColorIndex).opacity(0.50)),
-                             in: .rect(cornerRadius: 22))
+                             in: .rect(cornerRadius: cardCorner))
                 .overlay(
                     VStack(spacing: 10) {
                         Text(job.title)
@@ -199,12 +233,11 @@ struct TrueStackDeckView: View {
                     }
                     .padding()
                 )
-                .opacity(isTop ? 1.0 : nonTopOpacity)
+                .contentShape(RoundedRectangle(cornerRadius: cardCorner, style: .continuous))
 
-            // Tap zone (top card only)
             if isTop && expandedJob == nil {
                 Color.clear
-                    .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: cardCorner, style: .continuous))
                     .onTapGesture {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
                             expandedJob = job
@@ -230,61 +263,86 @@ struct TrueStackDeckView: View {
                     }
             }
         }
-        .matchedGeometryEffect(id: job.persistentModelID, in: deckNS)
-        .offset(y: CGFloat(idx) * layerOffsetY)
-        .rotationEffect(.degrees(isTop ? 0 : Double(tiltSign) * Double(tiltDegrees))) // top is straight
-        .offset(x: isTop ? dragTranslation : 0) // swipe top card
-        .gesture(isTop ? drag : nil)
-        .zIndex(Double(stackDepth - idx)) // draw order: smaller idx = higher z
-        .animation(.spring(response: 0.35, dampingFraction: 0.88), value: dragTranslation)
     }
 
-    // MARK: - Deck operations
+    // MARK: - CardDeck transforms
 
-    private func sendTopCardToBack() {
+    private var progressIndex: Double { dragProgress + Double(selectedIndex) }
+    private func currentPosition(for index: Int) -> Double { progressIndex - Double(index) }
+    private func zIndex(for index: Int) -> Double { -abs(currentPosition(for: index)) }
+
+    private func xOffset(for index: Int) -> Double {
+        let padding = containerSize.width / 10
+        let x = (Double(index) - progressIndex) * padding
+        if index == selectedIndex && progressIndex < Double(max(0, deck.count - 1)) && progressIndex > 0 {
+            return x * swingOutMultiplier
+        }
+        return x
+    }
+    private var swingOutMultiplier: Double { abs(sin(.pi * progressIndex) * 20) }
+    private func scale(for index: Int) -> CGFloat { 1.0 - (0.1 * abs(currentPosition(for: index))) }
+    private func rotation(for index: Int) -> Double { -currentPosition(for: index) * 2 }
+    private func shadow(for index: Int) -> Color {
+        let progress = 1.0 - abs(progressIndex - Double(index))
+        return .black.opacity(0.30 * progress)
+    }
+
+    // MARK: - Drag / snap
+
+    private func dragGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 5)
+            .onChanged { value in
+                guard width > 0 else { return }
+                dragProgress = -(value.translation.width / width)
+            }
+            .onEnded { _ in snapToNearestIndex() }
+    }
+
+    private func snapToNearestIndex() {
+        let threshold = 0.30
+        if abs(dragProgress) < threshold {
+            withAnimation(.bouncy) { dragProgress = 0.0 }
+            return
+        }
+        if dragProgress < 0 {
+            withAnimation(.smooth(duration: 0.25)) { bringLastToFront() }
+        } else {
+            withAnimation(.smooth(duration: 0.25)) { sendFirstToBack() }
+        }
+        dragProgress = 0.0
+        selectedIndex = 0
+    }
+
+    private func sendFirstToBack() {
         guard let first = deck.first else { return }
         deck.removeFirst()
         deck.append(first)
     }
 
-    private func removeFromDeck(_ job: Job) {
-        deck.removeAll { $0.persistentModelID == job.persistentModelID }
+    private func bringLastToFront() {
+        guard let last = deck.last else { return }
+        deck.removeLast()
+        deck.insert(last, at: 0)
     }
+
+    // MARK: - Helpers
 
     private func cycleColor(_ job: Job) {
         job.cycleColorForward()
         try? modelContext.save()
     }
+}
 
-    // (Kept for completeness if you still reference these elsewhere)
-    private func jobColorIndex(_ job: Job) -> Int {
-        let maxCount = 12
-        func clamp(_ v: Int) -> Int { (v % maxCount + maxCount) % maxCount }
-        let mirror = Mirror(reflecting: job)
-        for child in mirror.children {
-            guard let label = child.label else { continue }
-            let value = child.value
-            if label == "colorIndex" {
-                if let i = value as? Int { return clamp(i) }
-                if let i = unwrapAny(value) as? Int { return clamp(i) }
-            }
-            if label == "colorCode" {
-                if let s = value as? String, let i = stringCodeToIndex(s) { return clamp(i) }
-                if let s = unwrapAny(value) as? String, let i = stringCodeToIndex(s) { return clamp(i) }
-            }
+private struct SizeReader: View {
+    var onChange: (CGSize) -> Void
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear.preference(key: SizePrefKey.self, value: proxy.size)
         }
-        return clamp(abs(job.title.hashValue))
+        .onPreferenceChange(SizePrefKey.self, perform: onChange)
     }
-
-    private func unwrapAny(_ value: Any) -> Any? {
-        let m = Mirror(reflecting: value)
-        guard m.displayStyle == .optional else { return value }
-        return m.children.first?.value
-    }
-
-    private func stringCodeToIndex(_ raw: String) -> Int? {
-        let ordered = ["gray", "red", "blue", "green", "purple", "orange", "yellow", "teal", "brown"]
-        let key = raw.lowercased()
-        return ordered.firstIndex(of: key)
-    }
+}
+private struct SizePrefKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) { value = nextValue() }
 }
