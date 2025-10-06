@@ -2,34 +2,41 @@
 //  TrueStackDeckView.swift
 //  nexusStack / OE Hub
 //
-// Test after repo rename
 
 import SwiftUI
 import SwiftData
 
+// MARK: - Preference key to capture intrinsic content height
+private struct ViewHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 @available(iOS 26.0, *)
 struct TrueStackDeckView: View {
-    // MARK: Input
+    // Input
     let jobs: [Job]
 
-    // MARK: Environment
+    // Env
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
 
-    // MARK: Feature flags
-    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
-    @AppStorage("isTrueStackEnabled")   private var isTrueStackEnabled   = false
+    // Feature flags
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
+    @AppStorage("isTrueStackEnabled") private var isTrueStackEnabled = false
 
-    // MARK: Deck state
+    // Deck state
     @State private var deck: [Job] = []
     @State private var dragTranslation: CGFloat = 0
     @State private var isDragging = false
 
-    // Expanded panel
+    // Expanded
     @State private var expandedJob: Job? = nil
     @Namespace private var deckNS
 
-    // Routes launched from expanded view
+    // Routes
     @State private var showGitHub = false
     @State private var showConfluence = false
     @State private var showDue = false
@@ -38,81 +45,80 @@ struct TrueStackDeckView: View {
     @State private var showNotes = false
     @State private var showInfo = false
 
-    // Context actions
+    // Context
     @State private var showRenameAlert = false
     @State private var pendingRenameText = ""
     @State private var jobForContext: Job? = nil
     @State private var showDeleteConfirm = false
 
-    // Settings (hamburger)
+    // Settings panel
     @State private var showSettings = false
 
-    // MARK: Layout dials
-    private let horizontalGutter: CGFloat = 18          // side padding for all cards
-    private let topHeightRatio: CGFloat = 0.66          // top-card height vs. usable height
+    // Layout dials
+    private let horizontalGutter: CGFloat = 18
     private let maxCardHeight: CGFloat = 560
-    private let stackDepth = 6                          // max rendered layers
-    private let layerOffsetY: CGFloat = 18              // vertical fanning
-    private let tiltDegrees: CGFloat = 3.0              // tiny tilt for non-top cards
-
-    /// Scale steps for the cards beneath the top (kept modest so everything stays in-bounds)
-    /// index 0 = top (1.00), 1 = 0.94, 2 = 0.90, 3 = 0.86, …
-    private func scaleForIndex(_ idx: Int) -> CGFloat {
-        max(0.82, 1.0 - CGFloat(idx) * 0.06)
-    }
-
+    private let topHeightRatio: CGFloat = 0.66
+    private let stackDepth = 6
+    private let layerOffsetY: CGFloat = 18
+    private let tiltDegrees: CGFloat = 3.0
+    private func scaleForIndex(_ idx: Int) -> CGFloat { max(0.82, 1.0 - CGFloat(idx) * 0.06) }
     private let nonTopOpacity: Double = 0.92
     private let swipeThreshold: CGFloat = 90
 
+    // Dynamic height for the **top** card’s content (intrinsic, measured once per top card / size change)
+    @State private var topCardContentHeight: CGFloat = 0
+    @State private var lastMeasuredWidth: CGFloat = 0   // rotation remeasure
+
     init(jobs: [Job]) { self.jobs = jobs }
+
+    // Convenient “top id” to know when the top card changes
+    private var topID: PersistentIdentifier? { deck.first?.persistentModelID }
 
     var body: some View {
         GeometryReader { geo in
-            // Safe area aware sizing
             let topInset = geo.safeAreaInsets.top
             let bottomInset = geo.safeAreaInsets.bottom
             let usableHeight = geo.size.height - topInset - bottomInset
 
-            // Base (unscaled) card size
+            // Base (unscaled) card dimensions
             let baseW = max(280, geo.size.width - (horizontalGutter * 2))
             let baseH = min(usableHeight * topHeightRatio, maxCardHeight)
 
-            // Full deck height (so we can vertically center the fan)
+            // Actual height for the top card = max(baseH, measured), clamped
+            let topCardHeight = min(maxCardHeight, max(baseH, topCardContentHeight))
+
+            // Visible stack height
             let visibleCount = min(stackDepth, deck.count)
-            let deckHeight = baseH + CGFloat(max(0, visibleCount - 1)) * layerOffsetY
+            let deckHeight = topCardHeight + CGFloat(max(0, visibleCount - 1)) * layerOffsetY
 
             ZStack {
-                // Subtle backdrop
                 LinearGradient(
                     colors: [.white.opacity(colorScheme == .dark ? 0.02 : 0.06), .clear],
-                    startPoint: .top,
-                    endPoint: .bottom
+                    startPoint: .top, endPoint: .bottom
                 )
                 .ignoresSafeArea()
 
-                // Centered deck container. We use a VStack to center vertically.
                 VStack {
                     Spacer(minLength: topInset)
                     ZStack {
                         ForEach(Array(deck.prefix(stackDepth).enumerated()), id: \.element.persistentModelID) { (idx, job) in
                             let scale = scaleForIndex(idx)
-                            let cardSize = CGSize(width: baseW * scale, height: baseH * scale)
-                            card(job: job, index: idx, size: cardSize)
-                                // fan vertically
+                            // Non-top cards use scaled base height; top uses dynamic height
+                            let cardHeight = (idx == 0) ? topCardHeight : (baseH * scale)
+                            let cardSize = CGSize(width: baseW * scale, height: cardHeight)
+                            card(job: job, index: idx, size: cardSize, baseWidth: baseW, baseHeight: baseH)
                                 .offset(y: CGFloat(idx) * layerOffsetY)
-                                // keep each scaled card centered (ZStack centers by default)
                         }
                     }
                     .frame(width: baseW, height: deckHeight, alignment: .center)
                     .padding(.horizontal, horizontalGutter)
+
                     Spacer(minLength: bottomInset)
                 }
 
                 // Expanded overlay
                 if let selected = expandedJob {
-                    Color.black.opacity(0.20).ignoresSafeArea()
-                        .transition(.opacity)
-
+                    Color.black.opacity(0.20).ignoresSafeArea().transition(.opacity)
                     TrueStackExpandedView(
                         job: selected,
                         close: { withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { expandedJob = nil } },
@@ -129,38 +135,45 @@ struct TrueStackDeckView: View {
                     .zIndex(10)
                 }
 
-                // Hamburger (anchored below status bar)
-                VStack {
-                    HStack {
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Image(systemName: "line.horizontal.3")
-                                .font(.title2.weight(.semibold))
-                                .padding(10)
-                                .background(
-                                    Group {
-                                        if #available(iOS 26.0, *), isBetaGlassEnabled {
-                                            Color.clear.glassEffect(.regular, in: .circle)
-                                        } else {
-                                            Circle().fill(.ultraThinMaterial)
-                                        }
+                // Hamburger pinned to *true* safe-area corner in all orientations
+                GeometryReader { g in
+                    Button { showSettings = true } label: {
+                        Image(systemName: "line.horizontal.3")
+                            .font(.title2.weight(.semibold))
+                            .padding(10)
+                            .background(
+                                Group {
+                                    if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                        Color.clear.glassEffect(.regular, in: .circle)
+                                    } else {
+                                        Circle().fill(.ultraThinMaterial)
                                     }
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .padding(.leading, 12)
-                        Spacer()
+                                }
+                            )
                     }
-                    .padding(.top, topInset + 6)
-                    Spacer()
+                    .buttonStyle(.plain)
+                    .position(x: g.safeAreaInsets.leading + 8 + 20, // 20 ≈ half of ~40pt control
+                              y: g.safeAreaInsets.top + 8 + 20)
                 }
-                .ignoresSafeArea(edges: .top)
-                .zIndex(11)
+                .ignoresSafeArea() // lets us place relative to safe insets
             }
+            // Initialize deck
             .task { deck = jobs }
 
-            // MARK: Launches from expanded buttons
+            // Re-measure when geometry *really* changes (rotation, split view, etc.)
+            .onChange(of: geo.size.width) { oldW, newW in
+                if abs(newW - oldW) > 1 {
+                    lastMeasuredWidth = newW
+                    topCardContentHeight = 0
+                }
+            }
+
+            // Re-measure when the top card changes
+            .onChange(of: topID) {
+                topCardContentHeight = 0
+            }
+
+            // Routes
             .sheet(isPresented: $showDue) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
             .sheet(isPresented: $showChecklist) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
             .sheet(isPresented: $showMindMap) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
@@ -173,7 +186,7 @@ struct TrueStackDeckView: View {
                 if let j = expandedJob { ConfluenceLinksView(storageKey: "confluenceLinks.\(j.repoBucketKey)", maxLinks: 5) }
             }
 
-            // Settings routing (same behavior as HomeView)
+            // Settings
             .sheet(isPresented: Binding(
                 get: { showSettings && !isBetaGlassEnabled },
                 set: { if !$0 { showSettings = false } }
@@ -184,7 +197,7 @@ struct TrueStackDeckView: View {
                 }
             }
 
-            // Rename + Delete
+            // Alerts
             .alert("Rename Stack", isPresented: $showRenameAlert) {
                 TextField("Title", text: $pendingRenameText)
                 Button("Cancel", role: .cancel) { jobForContext = nil }
@@ -212,7 +225,7 @@ struct TrueStackDeckView: View {
 
     // MARK: - Card
 
-    private func card(job: Job, index idx: Int, size: CGSize) -> some View {
+    private func card(job: Job, index idx: Int, size: CGSize, baseWidth: CGFloat, baseHeight: CGFloat) -> some View {
         let isTop = idx == 0
         let tiltSign: CGFloat = (idx % 2 == 0) ? 1 : -1
 
@@ -238,8 +251,36 @@ struct TrueStackDeckView: View {
                 }
             }
 
+        // Content (intrinsic height, measured only for top card)
+        let content = VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(job.title)
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+                Text("Created \(tsFormattedDate(job.creationDate))")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.bottom, 4)
+
+            Divider().opacity(0.12)
+
+            infoGrid(for: job)
+                .font(.subheadline)
+        }
+        .padding(14)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(width: size.width, alignment: .topLeading)
+        // width-keyed ID so a rotation (width change) forces a fresh measure
+        .id(isTop ? "topW-\(Int(size.width))-\(job.persistentModelID.hashValue)" : "\(job.persistentModelID.hashValue)")
+        .background(
+            GeometryReader { gp in
+                Color.clear.preference(key: ViewHeightKey.self, value: isTop ? gp.size.height : 0)
+            }
+        )
+
         return ZStack(alignment: .topLeading) {
-            // Glass surface
+            // Glass body
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.clear)
                 .frame(width: size.width, height: size.height)
@@ -248,31 +289,13 @@ struct TrueStackDeckView: View {
                     in: .rect(cornerRadius: 22)
                 )
 
-            // CONTENT: Title + Created (top), Info fills remaining
-            VStack(alignment: .leading, spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(job.title)
-                        .font(.headline.weight(.semibold))
-                        .lineLimit(1)
-                    Text("Created \(tsFormattedDate(job.creationDate))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.bottom, 4)
+            // Intrinsic content
+            content
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(.white.opacity(isTop ? 0.10 : 0.06), lineWidth: 1)
+                )
 
-                Divider().opacity(0.12)
-
-                infoGrid(for: job)
-                    .font(.subheadline)
-            }
-            .padding(14)
-            .frame(width: size.width, height: size.height, alignment: .topLeading)
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(.white.opacity(isTop ? 0.10 : 0.06), lineWidth: 1)
-            )
-
-            // Interactions on the top card
             if isTop && expandedJob == nil {
                 Color.clear
                     .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -302,13 +325,27 @@ struct TrueStackDeckView: View {
                     }
             }
         }
+        // HARD CLIP the whole card to its rounded bounds so nothing can overflow during reflow
+        .mask(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .clipped()
+        // Do not animate height changes, only drags
+        .animation(nil, value: topCardContentHeight)
+
         .opacity(isTop ? 1.0 : nonTopOpacity)
         .matchedGeometryEffect(id: job.persistentModelID, in: deckNS)
         .rotationEffect(.degrees(isTop ? 0 : Double(tiltSign) * Double(tiltDegrees)))
-        .offset(x: isTop ? dragTranslation : 0)                  // swipe only top
+        .offset(x: isTop ? dragTranslation : 0)
         .gesture(isTop ? drag : nil)
         .zIndex(Double(stackDepth - idx))
         .animation(.spring(response: 0.35, dampingFraction: 0.88), value: dragTranslation)
+        .onPreferenceChange(ViewHeightKey.self) { h in
+            // Update only from the **current** top card; ignore 0 and avoid animating this jump
+            if isTop, h > 0 {
+                withAnimation(.none) {
+                    topCardContentHeight = h
+                }
+            }
+        }
         .shadow(color: .black.opacity(isTop ? 0.35 : 0.22),
                 radius: isTop ? 20 : 12, y: isTop ? 12 : 6)
     }
@@ -365,3 +402,4 @@ struct TrueStackDeckView: View {
         try? modelContext.save()
     }
 }
+
