@@ -1,30 +1,34 @@
+//
+//  TrueStackDeckView.swift
+//  nexusStack / OE Hub
+//
+
 import SwiftUI
 import SwiftData
 
 @available(iOS 26.0, *)
 struct TrueStackDeckView: View {
+    // MARK: Input
     let jobs: [Job]
 
+    // MARK: Environment
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
 
-    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
-    @AppStorage("isTrueStackEnabled") private var isTrueStackEnabled = false
+    // MARK: Feature flags
+    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
+    @AppStorage("isTrueStackEnabled")   private var isTrueStackEnabled   = false
 
-    // NEW: settings presentation
-    @State private var showSettings = false
-
-    // Deck state
+    // MARK: Deck state
     @State private var deck: [Job] = []
-    @State private var containerSize: CGSize = .zero
-    @State private var dragProgress: Double = 0.0
-    @State private var selectedIndex: Int = 0
+    @State private var dragTranslation: CGFloat = 0
+    @State private var isDragging = false
 
-    // Expanded
+    // Expanded panel
     @State private var expandedJob: Job? = nil
     @Namespace private var deckNS
 
-    // Launchers from expanded view
+    // Routes launched from expanded view
     @State private var showGitHub = false
     @State private var showConfluence = false
     @State private var showDue = false
@@ -39,24 +43,45 @@ struct TrueStackDeckView: View {
     @State private var jobForContext: Job? = nil
     @State private var showDeleteConfirm = false
 
-    // Layout
-    private let cardCorner: CGFloat = 22
-    private let cardHorizontalMargin: CGFloat = 18
-    private let topHeightRatio: CGFloat = 0.66
+    // Settings (hamburger)
+    @State private var showSettings = false
+
+    // MARK: Layout dials
+    private let horizontalGutter: CGFloat = 18          // side padding for all cards
+    private let topHeightRatio: CGFloat = 0.66          // top-card height vs. usable height
     private let maxCardHeight: CGFloat = 560
+    private let stackDepth = 6                          // max rendered layers
+    private let layerOffsetY: CGFloat = 18              // vertical fanning
+    private let tiltDegrees: CGFloat = 3.0              // tiny tilt for non-top cards
+
+    /// Scale steps for the cards beneath the top (kept modest so everything stays in-bounds)
+    /// index 0 = top (1.00), 1 = 0.94, 2 = 0.90, 3 = 0.86, …
+    private func scaleForIndex(_ idx: Int) -> CGFloat {
+        max(0.82, 1.0 - CGFloat(idx) * 0.06)
+    }
+
+    private let nonTopOpacity: Double = 0.92
+    private let swipeThreshold: CGFloat = 90
+
+    init(jobs: [Job]) { self.jobs = jobs }
 
     var body: some View {
         GeometryReader { geo in
-            let safeW = geo.size.width - (cardHorizontalMargin * 2)
-            let baseH = min(geo.size.height * topHeightRatio, maxCardHeight)
-            let theta = CGFloat(2.5) * .pi / 180
-            let baseW = min(
-                safeW,
-                (safeW - baseH * sin(theta)) / max(cos(theta), 0.0001)
-            )
+            // Safe area aware sizing
+            let topInset = geo.safeAreaInsets.top
+            let bottomInset = geo.safeAreaInsets.bottom
+            let usableHeight = geo.size.height - topInset - bottomInset
+
+            // Base (unscaled) card size
+            let baseW = max(280, geo.size.width - (horizontalGutter * 2))
+            let baseH = min(usableHeight * topHeightRatio, maxCardHeight)
+
+            // Full deck height (so we can vertically center the fan)
+            let visibleCount = min(stackDepth, deck.count)
+            let deckHeight = baseH + CGFloat(max(0, visibleCount - 1)) * layerOffsetY
 
             ZStack {
-                // backdrop
+                // Subtle backdrop
                 LinearGradient(
                     colors: [.white.opacity(colorScheme == .dark ? 0.02 : 0.06), .clear],
                     startPoint: .top,
@@ -64,28 +89,23 @@ struct TrueStackDeckView: View {
                 )
                 .ignoresSafeArea()
 
-                // Deck
-                ZStack {
-                    ForEach(Array(deck.enumerated()), id: \.element.persistentModelID) { (i, job) in
-                        card(job: job, index: i, size: CGSize(width: baseW, height: baseH))
-                            .zIndex(zIndex(for: i))
-                            .offset(x: xOffset(for: i))
-                            .scaleEffect(scale(for: i))
-                            .rotationEffect(.degrees(rotation(for: i)))
-                            .shadow(color: shadow(for: i), radius: 30, y: 20)
-                            .matchedGeometryEffect(id: job.persistentModelID, in: deckNS)
+                // Centered deck container. We use a VStack to center vertically.
+                VStack {
+                    Spacer(minLength: topInset)
+                    ZStack {
+                        ForEach(Array(deck.prefix(stackDepth).enumerated()), id: \.element.persistentModelID) { (idx, job) in
+                            let scale = scaleForIndex(idx)
+                            let cardSize = CGSize(width: baseW * scale, height: baseH * scale)
+                            card(job: job, index: idx, size: cardSize)
+                                // fan vertically
+                                .offset(y: CGFloat(idx) * layerOffsetY)
+                                // keep each scaled card centered (ZStack centers by default)
+                        }
                     }
+                    .frame(width: baseW, height: deckHeight, alignment: .center)
+                    .padding(.horizontal, horizontalGutter)
+                    Spacer(minLength: bottomInset)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, cardHorizontalMargin)
-                .contentShape(Rectangle())
-                .gesture(dragGesture(width: geo.size.width))
-                .onChange(of: selectedIndex) { _, newValue in
-                    let maxIdx = max(0, deck.count - 1)
-                    let clamped = min(max(0, newValue), maxIdx)
-                    if clamped != newValue { selectedIndex = clamped }
-                }
-                .background(SizeReader { size in containerSize = size })
 
                 // Expanded overlay
                 if let selected = expandedJob {
@@ -108,46 +128,38 @@ struct TrueStackDeckView: View {
                     .zIndex(10)
                 }
 
-                // NEW: floating hamburger (works even if no nav bar shown)
+                // Hamburger (anchored below status bar)
                 VStack {
                     HStack {
                         Button {
                             showSettings = true
                         } label: {
                             Image(systemName: "line.horizontal.3")
-                                .font(.title3.weight(.semibold))
+                                .font(.title2.weight(.semibold))
                                 .padding(10)
+                                .background(
+                                    Group {
+                                        if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                            Color.clear.glassEffect(.regular, in: .circle)
+                                        } else {
+                                            Circle().fill(.ultraThinMaterial)
+                                        }
+                                    }
+                                )
                         }
-                        .background(
-                            Group {
-                                if #available(iOS 26.0, *), isBetaGlassEnabled {
-                                    Color.clear.glassEffect(.regular, in: .capsule)
-                                } else {
-                                    Capsule().fill(.ultraThinMaterial)
-                                }
-                            }
-                        )
-                        .overlay(Capsule().stroke(.white.opacity(0.10), lineWidth: 1))
-                        .clipShape(Capsule())
-                        .shadow(color: .black.opacity(0.25), radius: 10, y: 4)
-
+                        .buttonStyle(.plain)
+                        .padding(.leading, 12)
                         Spacer()
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-
+                    .padding(.top, topInset + 6)
                     Spacer()
                 }
-                .allowsHitTesting(expandedJob == nil) // avoid overlaps while expanded
+                .ignoresSafeArea(edges: .top)
                 .zIndex(11)
             }
-            .navigationTitle("") // keep nav bar slim if present
-            .task {
-                deck = jobs
-                selectedIndex = 0
-            }
+            .task { deck = jobs }
 
-            // Launches from expanded buttons (reuse your flows)
+            // MARK: Launches from expanded buttons
             .sheet(isPresented: $showDue) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
             .sheet(isPresented: $showChecklist) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
             .sheet(isPresented: $showMindMap) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
@@ -160,21 +172,18 @@ struct TrueStackDeckView: View {
                 if let j = expandedJob { ConfluenceLinksView(storageKey: "confluenceLinks.\(j.repoBucketKey)", maxLinks: 5) }
             }
 
-            // NEW: Settings presentation (mirrors the rest of the app)
+            // Settings routing (same behavior as HomeView)
             .sheet(isPresented: Binding(
                 get: { showSettings && !isBetaGlassEnabled },
                 set: { if !$0 { showSettings = false } }
-            )) {
-                SettingsView()
-            }
+            )) { SettingsView() }
             .overlay {
                 if showSettings && isBetaGlassEnabled {
-                    SettingsPanel(isPresented: $showSettings)
-                        .zIndex(20)
+                    SettingsPanel(isPresented: $showSettings).zIndex(20)
                 }
             }
 
-            // Alerts
+            // Rename + Delete
             .alert("Rename Stack", isPresented: $showRenameAlert) {
                 TextField("Title", text: $pendingRenameText)
                 Button("Cancel", role: .cancel) { jobForContext = nil }
@@ -192,52 +201,80 @@ struct TrueStackDeckView: View {
                     if let j = jobForContext {
                         modelContext.delete(j)
                         try? modelContext.save()
-                        deck.removeAll { $0.persistentModelID == j.persistentModelID }
-                        selectedIndex = min(selectedIndex, max(0, deck.count - 1))
+                        removeFromDeck(j)
                     }
                     jobForContext = nil
                 }
             } message: { Text("This action cannot be undone.") }
         }
-        // Also provide a nav-bar hamburger if this sits inside a NavigationStack
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button {
-                    showSettings = true
-                } label: {
-                    Label("Menu", systemImage: "line.horizontal.3")
-                }
-            }
-        }
     }
 
-    // MARK: - Card content
+    // MARK: - Card
 
-    private func card(job: Job, index i: Int, size: CGSize) -> some View {
-        let isTop = (i == selectedIndex)
+    private func card(job: Job, index idx: Int, size: CGSize) -> some View {
+        let isTop = idx == 0
+        let tiltSign: CGFloat = (idx % 2 == 0) ? 1 : -1
 
-        return ZStack {
-            RoundedRectangle(cornerRadius: cardCorner, style: .continuous)
+        let drag = DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                guard isTop, expandedJob == nil else { return }
+                isDragging = true
+                dragTranslation = value.translation.width
+            }
+            .onEnded { value in
+                guard isTop, expandedJob == nil else { return }
+                isDragging = false
+                let x = value.translation.width
+                if abs(x) > swipeThreshold {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                        sendTopCardToBack()
+                        dragTranslation = 0
+                    }
+                } else {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                        dragTranslation = 0
+                    }
+                }
+            }
+
+        return ZStack(alignment: .topLeading) {
+            // Glass surface
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.clear)
                 .frame(width: size.width, height: size.height)
-                .glassEffect(.regular.tint(color(for: job.effectiveColorIndex).opacity(0.50)),
-                             in: .rect(cornerRadius: cardCorner))
-                .overlay(
-                    VStack(spacing: 10) {
-                        Text(job.title)
-                            .font(.title3.weight(.semibold))
-                            .lineLimit(1)
-                        Text("Created \(tsFormattedDate(job.creationDate))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding()
+                .glassEffect(
+                    .regular.tint(color(for: job.effectiveColorIndex).opacity(isTop ? 0.50 : 0.42)),
+                    in: .rect(cornerRadius: 22)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: cardCorner, style: .continuous))
 
+            // CONTENT: Title + Created (top), Info fills remaining
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(job.title)
+                        .font(.headline.weight(.semibold))
+                        .lineLimit(1)
+                    Text("Created \(tsFormattedDate(job.creationDate))")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.bottom, 4)
+
+                Divider().opacity(0.12)
+
+                infoGrid(for: job)
+                    .font(.subheadline)
+            }
+            .padding(14)
+            .frame(width: size.width, height: size.height, alignment: .topLeading)
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(.white.opacity(isTop ? 0.10 : 0.06), lineWidth: 1)
+            )
+
+            // Interactions on the top card
             if isTop && expandedJob == nil {
                 Color.clear
-                    .contentShape(RoundedRectangle(cornerRadius: cardCorner, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .onTapGesture {
                         withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
                             expandedJob = job
@@ -247,6 +284,7 @@ struct TrueStackDeckView: View {
                         LongPressGesture(minimumDuration: 0.5).onEnded { _ in
                             jobForContext = job
                             pendingRenameText = job.title
+                            showRenameAlert = true
                         }
                     )
                     .contextMenu {
@@ -263,86 +301,66 @@ struct TrueStackDeckView: View {
                     }
             }
         }
+        .opacity(isTop ? 1.0 : nonTopOpacity)
+        .matchedGeometryEffect(id: job.persistentModelID, in: deckNS)
+        .rotationEffect(.degrees(isTop ? 0 : Double(tiltSign) * Double(tiltDegrees)))
+        .offset(x: isTop ? dragTranslation : 0)                  // swipe only top
+        .gesture(isTop ? drag : nil)
+        .zIndex(Double(stackDepth - idx))
+        .animation(.spring(response: 0.35, dampingFraction: 0.88), value: dragTranslation)
+        .shadow(color: .black.opacity(isTop ? 0.35 : 0.22),
+                radius: isTop ? 20 : 12, y: isTop ? 12 : 6)
     }
 
-    // MARK: - CardDeck transforms
+    // MARK: - Info grid
 
-    private var progressIndex: Double { dragProgress + Double(selectedIndex) }
-    private func currentPosition(for index: Int) -> Double { progressIndex - Double(index) }
-    private func zIndex(for index: Int) -> Double { -abs(currentPosition(for: index)) }
-
-    private func xOffset(for index: Int) -> Double {
-        let padding = containerSize.width / 10
-        let x = (Double(index) - progressIndex) * padding
-        if index == selectedIndex && progressIndex < Double(max(0, deck.count - 1)) && progressIndex > 0 {
-            return x * swingOutMultiplier
+    @ViewBuilder
+    private func infoGrid(for job: Job) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            infoRow("Email", job.email)
+            infoRow("Pay Rate", payString(rate: job.payRate, type: job.compensation))
+            infoRow("Manager", job.managerName)
+            infoRow("Role / Title", job.roleTitle)
+            infoRow("Equipment", job.equipmentList)
+            infoRow("Job Type", job.type.rawValue + (job.contractEndDate.map { "  •  Ends \(tsFormattedDate($0))" } ?? ""))
         }
-        return x
-    }
-    private var swingOutMultiplier: Double { abs(sin(.pi * progressIndex) * 20) }
-    private func scale(for index: Int) -> CGFloat { 1.0 - (0.1 * abs(currentPosition(for: index))) }
-    private func rotation(for index: Int) -> Double { -currentPosition(for: index) * 2 }
-    private func shadow(for index: Int) -> Color {
-        let progress = 1.0 - abs(progressIndex - Double(index))
-        return .black.opacity(0.30 * progress)
     }
 
-    // MARK: - Drag / snap
-
-    private func dragGesture(width: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 5)
-            .onChanged { value in
-                guard width > 0 else { return }
-                dragProgress = -(value.translation.width / width)
+    @ViewBuilder
+    private func infoRow(_ label: String, _ value: String?) -> some View {
+        if let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(label).foregroundStyle(.secondary)
+                Text(trimmed)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
             }
-            .onEnded { _ in snapToNearestIndex() }
+        }
     }
 
-    private func snapToNearestIndex() {
-        let threshold = 0.30
-        if abs(dragProgress) < threshold {
-            withAnimation(.bouncy) { dragProgress = 0.0 }
-            return
-        }
-        if dragProgress < 0 {
-            withAnimation(.smooth(duration: 0.25)) { bringLastToFront() }
-        } else {
-            withAnimation(.smooth(duration: 0.25)) { sendFirstToBack() }
-        }
-        dragProgress = 0.0
-        selectedIndex = 0
+    private func payString(rate: Double, type: Job.PayType) -> String? {
+        guard rate > 0 else { return nil }
+        let f = NumberFormatter()
+        f.numberStyle = .currency
+        let amount = f.string(from: NSNumber(value: rate)) ?? "\(rate)"
+        let period = (type == .hourly) ? "/hr" : "/yr"
+        return "\(amount)\(period)"
     }
 
-    private func sendFirstToBack() {
+    // MARK: - Deck ops
+
+    private func sendTopCardToBack() {
         guard let first = deck.first else { return }
         deck.removeFirst()
         deck.append(first)
     }
 
-    private func bringLastToFront() {
-        guard let last = deck.last else { return }
-        deck.removeLast()
-        deck.insert(last, at: 0)
+    private func removeFromDeck(_ job: Job) {
+        deck.removeAll { $0.persistentModelID == job.persistentModelID }
     }
-
-    // MARK: - Helpers
 
     private func cycleColor(_ job: Job) {
         job.cycleColorForward()
         try? modelContext.save()
     }
-}
-
-private struct SizeReader: View {
-    var onChange: (CGSize) -> Void
-    var body: some View {
-        GeometryReader { proxy in
-            Color.clear.preference(key: SizePrefKey.self, value: proxy.size)
-        }
-        .onPreferenceChange(SizePrefKey.self, perform: onChange)
-    }
-}
-private struct SizePrefKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) { value = nextValue() }
 }
