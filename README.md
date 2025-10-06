@@ -1,6 +1,6 @@
-WorkForge (OE Hub) - Productivity Task Manager
+nexusStack - Productivity Task Manager
 
-WorkForge is a sleek productivity app designed to simplify task and project management. Built for iOS, it helps users create and organize jobs with deliverables, checklists, notes, and due dates. The app offers customizable task colors, reminder notifications, and options to mark tasks as complete or delete them, all within an intuitive interface featuring tabs for due tasks, checklists, notes, and job details.
+nexusStack is a sleek productivity app designed to simplify task and project management. Built for iOS, it helps users create and organize jobs with deliverables, checklists, notes, and due dates. The app offers customizable task colors, reminder notifications, and options to mark tasks as complete or delete them, all within an intuitive interface featuring tabs for due tasks, checklists, notes, and job details.
 Features
 
     Job Management: Create and manage jobs with associated tasks.
