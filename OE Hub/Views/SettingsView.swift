@@ -101,7 +101,7 @@ struct SettingsView: View {
 
                     // MARK: About
                     SectionCard(useBetaGlass: useBetaGlass, useClassicGlass: useClassicGlass) {
-                        Text(".nexusStack helps freelancers, teams, and OE professionals manage jobs, deliverables, and GitHub repo's efficiently.")
+                        Text(".nexusStack helps freelancers, teams, and IT professionals manage jobs, deliverables, and GitHub repo's efficiently.")
                             .foregroundStyle(.secondary)
                     }
                 }

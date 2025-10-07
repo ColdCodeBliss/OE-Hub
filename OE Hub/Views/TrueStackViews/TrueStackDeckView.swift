@@ -137,26 +137,48 @@ struct TrueStackDeckView: View {
 
                 // Hamburger pinned to *true* safe-area corner in all orientations
                 GeometryReader { g in
-                    Button { showSettings = true } label: {
-                        Image(systemName: "line.horizontal.3")
-                            .font(.title2.weight(.semibold))
-                            .padding(10)
-                            .background(
-                                Group {
-                                    if #available(iOS 26.0, *), isBetaGlassEnabled {
-                                        Color.clear.glassEffect(.regular, in: .circle)
-                                    } else {
-                                        Circle().fill(.ultraThinMaterial)
+                        // Simple orientation check
+                        let isLandscape = g.size.width > g.size.height
+
+                        // Safe-area edges
+                        let safeTop = g.safeAreaInsets.top
+                        let safeLeading = g.safeAreaInsets.leading
+
+                        // Control size (≈40pt total)
+                        let buttonSide: CGFloat = 40
+                        let half: CGFloat = buttonSide / 2
+
+                        // --- Tunable offsets ---
+                        // Portrait: sit *below* the time/clock
+                        let portraitX = safeLeading + 16 + half   // nudge in from the left a bit
+                        let portraitY = safeTop + 56 + half       // push down under the clock
+
+                        // Landscape: “just inside” the top-left corner (a little more inward)
+                        let landscapeX = safeLeading + 24 + half  // move right slightly vs portrait
+                        let landscapeY = safeTop + 12 + half      // tighter vertical margin
+
+                        Button { showSettings = true } label: {
+                            Image(systemName: "line.horizontal.3")
+                                .font(.title2.weight(.semibold))
+                                .frame(width: buttonSide, height: buttonSide)
+                                .background(
+                                    Group {
+                                        if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                            Color.clear.glassEffect(.regular, in: .circle)
+                                        } else {
+                                            Circle().fill(.ultraThinMaterial)
+                                        }
                                     }
-                                }
-                            )
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .position(
+                            x: isLandscape ? landscapeX : portraitX,
+                            y: isLandscape ? landscapeY : portraitY
+                        )
                     }
-                    .buttonStyle(.plain)
-                    .position(x: g.safeAreaInsets.leading + 8 + 20, // 20 ≈ half of ~40pt control
-                              y: g.safeAreaInsets.top + 8 + 20)
+                    .ignoresSafeArea()
                 }
-                .ignoresSafeArea() // lets us place relative to safe insets
-            }
             // Initialize deck
             .task { deck = jobs }
 
