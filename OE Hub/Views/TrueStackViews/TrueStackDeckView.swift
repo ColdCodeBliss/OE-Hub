@@ -51,8 +51,9 @@ struct TrueStackDeckView: View {
     @State private var jobForContext: Job? = nil
     @State private var showDeleteConfirm = false
 
-    // Settings panel
+    // Settings / Help
     @State private var showSettings = false
+    @State private var showHelp = false
 
     // Layout dials
     private let horizontalGutter: CGFloat = 18
@@ -65,7 +66,7 @@ struct TrueStackDeckView: View {
     private let nonTopOpacity: Double = 0.92
     private let swipeThreshold: CGFloat = 90
 
-    // Dynamic height for the **top** card’s content (intrinsic, measured once per top card / size change)
+    // Dynamic height for the **top** card’s content
     @State private var topCardContentHeight: CGFloat = 0
     @State private var lastMeasuredWidth: CGFloat = 0   // rotation remeasure
 
@@ -103,7 +104,6 @@ struct TrueStackDeckView: View {
                     ZStack {
                         ForEach(Array(deck.prefix(stackDepth).enumerated()), id: \.element.persistentModelID) { (idx, job) in
                             let scale = scaleForIndex(idx)
-                            // Non-top cards use scaled base height; top uses dynamic height
                             let cardHeight = (idx == 0) ? topCardHeight : (baseH * scale)
                             let cardSize = CGSize(width: baseW * scale, height: cardHeight)
                             card(job: job, index: idx, size: cardSize, baseWidth: baseW, baseHeight: baseH)
@@ -135,54 +135,89 @@ struct TrueStackDeckView: View {
                     .zIndex(10)
                 }
 
-                // Hamburger pinned to *true* safe-area corner in all orientations
+                // ──────────────────────────────────────────────────────────────
+                // Corner controls (Hamburger left, Add right) with portrait/landscape tuning
+                // ──────────────────────────────────────────────────────────────
                 GeometryReader { g in
-                        // Simple orientation check
-                        let isLandscape = g.size.width > g.size.height
+                    // Orientation
+                    let isLandscape = g.size.width > g.size.height
 
-                        // Safe-area edges
-                        let safeTop = g.safeAreaInsets.top
-                        let safeLeading = g.safeAreaInsets.leading
+                    // Safe-area edges
+                    let safeTop = g.safeAreaInsets.top
+                    let safeLeading = g.safeAreaInsets.leading
+                    let safeTrailing = g.safeAreaInsets.trailing
 
-                        // Control size (≈40pt total)
-                        let buttonSide: CGFloat = 40
-                        let half: CGFloat = buttonSide / 2
+                    // Control size (≈40pt total)
+                    let buttonSize: CGFloat = 40
+                    let half: CGFloat = buttonSize / 2
 
-                        // --- Tunable offsets ---
-                        // Portrait: sit *below* the time/clock
-                        let portraitX = safeLeading + 16 + half   // nudge in from the left a bit
-                        let portraitY = safeTop + 56 + half       // push down under the clock
+                    // --- Tunable offsets (match your chosen hamburger numbers) ---
+                    // Portrait: *below* the time/clock
+                    let portraitLeftX  = safeLeading + 16 + half
+                    let portraitLeftY  = safeTop + 56 + half
+                    let portraitRightX = g.size.width - safeTrailing - 16 - half
+                    let portraitRightY = portraitLeftY
 
-                        // Landscape: “just inside” the top-left corner (a little more inward)
-                        let landscapeX = safeLeading + 24 + half  // move right slightly vs portrait
-                        let landscapeY = safeTop + 12 + half      // tighter vertical margin
+                    // Landscape: just inside the corners
+                    let landscapeLeftX  = safeLeading + 24 + half
+                    let landscapeLeftY  = safeTop + 12 + half
+                    let landscapeRightX = g.size.width - safeTrailing - 24 - half
+                    let landscapeRightY = landscapeLeftY
 
-                        Button { showSettings = true } label: {
-                            Image(systemName: "line.horizontal.3")
-                                .font(.title2.weight(.semibold))
-                                .frame(width: buttonSide, height: buttonSide)
-                                .background(
-                                    Group {
-                                        if #available(iOS 26.0, *), isBetaGlassEnabled {
-                                            Color.clear.glassEffect(.regular, in: .circle)
-                                        } else {
-                                            Circle().fill(.ultraThinMaterial)
-                                        }
+                    // Hamburger (Menu with Settings + Help)
+                    Menu {
+                        Button("Settings") { showSettings = true }
+                        Button("Help")     { showHelp = true }
+                    } label: {
+                        Image(systemName: "line.horizontal.3")
+                            .font(.title2.weight(.semibold))
+                            .frame(width: buttonSize, height: buttonSize)
+                            .background(
+                                Group {
+                                    if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                        Color.clear.glassEffect(.regular, in: .circle)
+                                    } else {
+                                        Circle().fill(.ultraThinMaterial)
                                     }
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .position(
-                            x: isLandscape ? landscapeX : portraitX,
-                            y: isLandscape ? landscapeY : portraitY
-                        )
+                                }
+                            )
                     }
-                    .ignoresSafeArea()
+                    .buttonStyle(.plain)
+                    .position(
+                        x: isLandscape ? landscapeLeftX  : portraitLeftX,
+                        y: isLandscape ? landscapeLeftY  : portraitLeftY
+                    )
+
+                    // ➕ Add Job (mirrors hamburger, but top-right)
+                    Button {
+                        addJob()
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.title2.weight(.semibold))
+                            .frame(width: buttonSize, height: buttonSize)
+                            .background(
+                                Group {
+                                    if #available(iOS 26.0, *), isBetaGlassEnabled {
+                                        Color.clear.glassEffect(.regular, in: .circle)
+                                    } else {
+                                        Circle().fill(.ultraThinMaterial)
+                                    }
+                                }
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .position(
+                        x: isLandscape ? landscapeRightX : portraitRightX,
+                        y: isLandscape ? landscapeRightY : portraitRightY
+                    )
                 }
+                .ignoresSafeArea()
+            }
+
             // Initialize deck
             .task { deck = jobs }
 
-            // Re-measure when geometry *really* changes (rotation, split view, etc.)
+            // Re-measure on width changes (rotation)
             .onChange(of: geo.size.width) { oldW, newW in
                 if abs(newW - oldW) > 1 {
                     lastMeasuredWidth = newW
@@ -208,7 +243,7 @@ struct TrueStackDeckView: View {
                 if let j = expandedJob { ConfluenceLinksView(storageKey: "confluenceLinks.\(j.repoBucketKey)", maxLinks: 5) }
             }
 
-            // Settings
+            // Settings / Help
             .sheet(isPresented: Binding(
                 get: { showSettings && !isBetaGlassEnabled },
                 set: { if !$0 { showSettings = false } }
@@ -216,6 +251,15 @@ struct TrueStackDeckView: View {
             .overlay {
                 if showSettings && isBetaGlassEnabled {
                     SettingsPanel(isPresented: $showSettings).zIndex(20)
+                }
+            }
+            .sheet(isPresented: Binding(
+                get: { showHelp && !isBetaGlassEnabled },
+                set: { if !$0 { showHelp = false } }
+            )) { HelpView() }
+            .overlay {
+                if showHelp && isBetaGlassEnabled {
+                    HelpPanel(isPresented: $showHelp).zIndex(20)
                 }
             }
 
@@ -273,7 +317,7 @@ struct TrueStackDeckView: View {
                 }
             }
 
-        // Content (intrinsic height, measured only for top card)
+        // Content (intrinsic height for top card)
         let content = VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(job.title)
@@ -293,7 +337,6 @@ struct TrueStackDeckView: View {
         .padding(14)
         .fixedSize(horizontal: false, vertical: true)
         .frame(width: size.width, alignment: .topLeading)
-        // width-keyed ID so a rotation (width change) forces a fresh measure
         .id(isTop ? "topW-\(Int(size.width))-\(job.persistentModelID.hashValue)" : "\(job.persistentModelID.hashValue)")
         .background(
             GeometryReader { gp in
@@ -302,7 +345,6 @@ struct TrueStackDeckView: View {
         )
 
         return ZStack(alignment: .topLeading) {
-            // Glass body
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(.clear)
                 .frame(width: size.width, height: size.height)
@@ -310,13 +352,12 @@ struct TrueStackDeckView: View {
                     .regular.tint(color(for: job.effectiveColorIndex).opacity(isTop ? 0.50 : 0.42)),
                     in: .rect(cornerRadius: 22)
                 )
-
-            // Intrinsic content
-            content
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(.white.opacity(isTop ? 0.10 : 0.06), lineWidth: 1)
+                        .stroke(.white.opacity(isTop ? 0.08 : 0.05), lineWidth: 1)
                 )
+
+            content
 
             if isTop && expandedJob == nil {
                 Color.clear
@@ -347,10 +388,8 @@ struct TrueStackDeckView: View {
                     }
             }
         }
-        // HARD CLIP the whole card to its rounded bounds so nothing can overflow during reflow
         .mask(RoundedRectangle(cornerRadius: 22, style: .continuous))
         .clipped()
-        // Do not animate height changes, only drags
         .animation(nil, value: topCardContentHeight)
 
         .opacity(isTop ? 1.0 : nonTopOpacity)
@@ -361,7 +400,6 @@ struct TrueStackDeckView: View {
         .zIndex(Double(stackDepth - idx))
         .animation(.spring(response: 0.35, dampingFraction: 0.88), value: dragTranslation)
         .onPreferenceChange(ViewHeightKey.self) { h in
-            // Update only from the **current** top card; ignore 0 and avoid animating this jump
             if isTop, h > 0 {
                 withAnimation(.none) {
                     topCardContentHeight = h
@@ -423,5 +461,20 @@ struct TrueStackDeckView: View {
         job.cycleColorForward()
         try? modelContext.save()
     }
-}
 
+    // MARK: - Add Job (mirrors HomeView behavior)
+    private func addJob() {
+        // Title like "Stack N" to match your existing convention
+        let nextIndex = (jobs.count + 1)
+        let newJob = Job(title: "Stack \(nextIndex)")
+        modelContext.insert(newJob)
+        do {
+            try modelContext.save()
+        } catch {
+            print("Error saving new stack: \(error)")
+        }
+
+        // Make it feel instant in this view as well:
+        deck.insert(newJob, at: 0)
+    }
+}
