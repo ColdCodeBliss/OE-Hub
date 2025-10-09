@@ -20,7 +20,6 @@ struct NotesTabView: View {
     @State private var editingColorIndex: Int = 0
 
     // Style toggles
-    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
     @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
 
     // Parent-driven trigger for the nav-bar “+”
@@ -181,7 +180,7 @@ struct NotesTabView: View {
         }
     }
 
-    // MARK: - Beta overlay (unchanged)
+    // MARK: - Beta overlay
     @ViewBuilder
     private var betaOverlay: some View {
         if (isAddingNote || isEditingNote) && isBetaGlassEnabled {
@@ -219,7 +218,7 @@ struct NotesTabView: View {
         let idx = safeIndex(note.colorIndex)
         let tint = colors[idx]
         let fg: Color = .black
-        let isGlass = (isLiquidGlassEnabled || isBetaGlassEnabled)
+        let isGlass = isBetaGlassEnabled
         let radius: CGFloat = 16
 
         return VStack(alignment: .leading, spacing: 8) {
@@ -259,20 +258,8 @@ struct NotesTabView: View {
                     )
                     .blendMode(.plusLighter)
             }
-        } else if isLiquidGlassEnabled {
-            RoundedRectangle(cornerRadius: radius, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(tint.opacity(0.55)))
-                .overlay(
-                    RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .fill(LinearGradient(
-                            colors: [Color.white.opacity(0.18), .clear],
-                            startPoint: .topTrailing,
-                            endPoint: .bottomLeading
-                        ))
-                        .blendMode(.plusLighter)
-                )
         } else {
+            // Standard (non-Beta): solid tint gradient
             RoundedRectangle(cornerRadius: radius, style: .continuous).fill(tint.gradient)
         }
     }

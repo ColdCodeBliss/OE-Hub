@@ -137,6 +137,7 @@ struct TrueStackDeckView: View {
 
                 // ──────────────────────────────────────────────────────────────
                 // Corner controls (Hamburger left, Add right) with portrait/landscape tuning
+                // + center logo (portrait only)
                 // ──────────────────────────────────────────────────────────────
                 GeometryReader { g in
                     // Orientation
@@ -210,8 +211,25 @@ struct TrueStackDeckView: View {
                         x: isLandscape ? landscapeRightX : portraitRightX,
                         y: isLandscape ? landscapeRightY : portraitRightY
                     )
+
+                    // Center logo (portrait only)
+                    if !isLandscape {
+                        let logoY = portraitLeftY                     // align vertically with hamburger
+                        let logoWidth = min(g.size.width * 0.16, 90) // responsive cap
+
+                        Image("nexusStack_logo") // single name; asset provides Any/Dark variants
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: logoWidth)
+                            .position(x: g.size.width / 2, y: logoY)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                            .zIndex(2) // keep above the deck if needed
+                    }
+
                 }
                 .ignoresSafeArea()
+
             }
 
             // Initialize deck

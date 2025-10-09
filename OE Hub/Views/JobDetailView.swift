@@ -20,9 +20,8 @@ struct JobDetailView: View {
     @State private var showGitHubBrowser: Bool = false
     @State private var showConfluenceSheet: Bool = false
 
-    // Style toggles (match rest of app)
-    @AppStorage("isLiquidGlassEnabled") private var isLiquidGlassEnabled = false
-    @AppStorage("isBetaGlassEnabled")   private var isBetaGlassEnabled   = false
+    // Style toggles
+    @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
     var job: Job
 
@@ -34,7 +33,7 @@ struct JobDetailView: View {
                 ToolbarItem(placement: .topBarTrailing) { trailingButton }
             }
 
-            // GitHub: sheet for Classic/Standard, full-screen overlay for Beta
+            // GitHub: sheet for Standard, full-screen overlay for Beta glass
             .sheet(isPresented: Binding(
                 get: { !isBetaGlassEnabled && showGitHubBrowser },
                 set: { if !$0 { showGitHubBrowser = false } }
@@ -133,7 +132,7 @@ struct JobDetailView: View {
                 .accessibilityLabel("Add Checklist Item")
 
         case .info:
-            // Confluence (left) + GitHub (right) with glassy pills (Beta/Classic)
+            // Confluence (left) + GitHub (right) with glassy pills (Beta only)
             HStack(spacing: 10) {
                 toolbarIconButton(assetName: "Confluence_icon", accessibility: "Open Confluence") {
                     showConfluenceSheet = true
@@ -163,7 +162,7 @@ struct JobDetailView: View {
         .background(toolbarPillBackground)
         .clipShape(Capsule())
         .overlay(
-            Capsule().stroke(Color.white.opacity((isBetaGlassEnabled || isLiquidGlassEnabled) ? 0.10 : 0), lineWidth: 1)
+            Capsule().stroke(Color.white.opacity(isBetaGlassEnabled ? 0.10 : 0), lineWidth: 1)
         )
     }
 
@@ -171,8 +170,6 @@ struct JobDetailView: View {
     private var toolbarPillBackground: some View {
         if #available(iOS 26.0, *), isBetaGlassEnabled {
             Color.clear.glassEffect(.regular, in: .capsule)
-        } else if isLiquidGlassEnabled {
-            Capsule().fill(.ultraThinMaterial)
         } else {
             Color.clear
         }
