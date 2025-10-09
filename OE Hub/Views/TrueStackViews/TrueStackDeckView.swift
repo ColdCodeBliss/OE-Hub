@@ -214,17 +214,18 @@ struct TrueStackDeckView: View {
 
                     // Center logo (portrait only)
                     if !isLandscape {
-                        let logoY = portraitLeftY                     // align vertically with hamburger
-                        let logoWidth = min(g.size.width * 0.16, 90) // responsive cap
+                        let bump: CGFloat = 12                  // tweak: 6–10 looks good on iPhone 17 Pro
+                        let logoY = portraitLeftY + bump       // nudge down a bit
+                        let logoWidth = min(g.size.width * 0.21, 96)
 
-                        Image("nexusStack_logo") // single name; asset provides Any/Dark variants
+                        Image("nexusStack_logo")
                             .resizable()
                             .scaledToFit()
                             .frame(width: logoWidth)
                             .position(x: g.size.width / 2, y: logoY)
                             .allowsHitTesting(false)
                             .accessibilityHidden(true)
-                            .zIndex(2) // keep above the deck if needed
+                            .zIndex(2)
                     }
 
                 }
