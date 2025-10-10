@@ -142,6 +142,7 @@ struct TrueStackDeckView: View {
                 GeometryReader { g in
                     // Orientation
                     let isLandscape = g.size.width > g.size.height
+                    let isPad = UIDevice.current.userInterfaceIdiom == .pad
 
                     // Safe-area edges
                     let safeTop = g.safeAreaInsets.top
@@ -152,16 +153,18 @@ struct TrueStackDeckView: View {
                     let buttonSize: CGFloat = 40
                     let half: CGFloat = buttonSize / 2
 
-                    // --- Tunable offsets (match your chosen hamburger numbers) ---
-                    // Portrait: *below* the time/clock
+                    // Tunable iPad landscape bump (adjust to taste)
+                    let padLandscapeBumpY: CGFloat = 22   // try 8–14 if you want a bit more/less
+
+                    // Portrait (unchanged)
                     let portraitLeftX  = safeLeading + 16 + half
                     let portraitLeftY  = safeTop + 56 + half
                     let portraitRightX = g.size.width - safeTrailing - 16 - half
                     let portraitRightY = portraitLeftY
 
-                    // Landscape: just inside the corners
+                    // Landscape: just inside the corners + optional iPad bump
                     let landscapeLeftX  = safeLeading + 24 + half
-                    let landscapeLeftY  = safeTop + 12 + half
+                    let landscapeLeftY  = safeTop + 12 + half + ((isPad && isLandscape) ? padLandscapeBumpY : 0)
                     let landscapeRightX = g.size.width - safeTrailing - 24 - half
                     let landscapeRightY = landscapeLeftY
 
@@ -212,13 +215,22 @@ struct TrueStackDeckView: View {
                         y: isLandscape ? landscapeRightY : portraitRightY
                     )
 
-                    // Center logo (portrait only)
-                    if !isLandscape {
-                        let bump: CGFloat = 12                  // tweak: 6–10 looks good on iPhone 17 Pro
-                        let logoY = portraitLeftY + bump       // nudge down a bit
-                        let logoWidth = min(g.size.width * 0.21, 96)
+                    // Center logo (portrait on iPhone; both orientations on iPad)
+                    if (!isLandscape) || isPad {
+                        // Y position: match your corner-control baselines
+                        // - iPhone portrait uses a small bump
+                        // - iPad landscape uses the same landscapeLeftY you already computed (which includes your 22pt bump)
+                        let phonePortraitBump: CGFloat = 12
+                        let logoY: CGFloat = (isPad && isLandscape)
+                            ? landscapeLeftY                  // already includes your iPad landscape bump
+                            : (portraitLeftY + phonePortraitBump)
 
-                        Image("nexusStack_logo")
+                        // Width: keep iPhone as-is; give iPad a slightly higher cap
+                        let logoWidth = isPad
+                            ? min(g.size.width * 0.12, 100)   // tweak as desired for iPad
+                            : min(g.size.width * 0.21, 96)    // your existing iPhone sizing
+
+                        Image("nexusStack_logo")              // single asset with Any/Dark variants
                             .resizable()
                             .scaledToFit()
                             .frame(width: logoWidth)
