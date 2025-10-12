@@ -24,6 +24,13 @@ struct JobDetailView: View {
     @AppStorage("isBetaGlassEnabled") private var isBetaGlassEnabled = false
 
     var job: Job
+    
+    // Add this in JobDetailView
+    init(job: Job, initialTab: DetailTab = .due) {
+        self.job = job
+        _selection = State(initialValue: initialTab)   // <- start on the tab the caller asked for
+    }
+
 
     var body: some View {
         content

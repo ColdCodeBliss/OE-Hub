@@ -54,6 +54,12 @@ struct TrueStackDeckView: View {
     // Settings / Help
     @State private var showSettings = false
     @State private var showHelp = false
+    
+    // Add near your other @State in TSDV
+    @State private var initialDetailTab: JobDetailView.DetailTab = .due
+    @State private var showDetail = false
+
+
 
     // Layout dials
     private let horizontalGutter: CGFloat = 18
@@ -122,12 +128,12 @@ struct TrueStackDeckView: View {
                     TrueStackExpandedView(
                         job: selected,
                         close: { withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) { expandedJob = nil } },
-                        openDue: { showDue = true },
-                        openChecklist: { showChecklist = true },
-                        openMindMap: { showMindMap = true },
-                        openNotes: { showNotes = true },
-                        openInfo: { showInfo = true },
-                        openGitHub: { showGitHub = true },
+                        openDue:        { presentDetail(.due) },
+                        openChecklist:  { presentDetail(.checklist) },
+                        openMindMap:    { presentDetail(.mindmap) },
+                        openNotes:      { presentDetail(.notes) },
+                        openInfo:       { presentDetail(.info) },
+                        openGitHub:     { showGitHub = true },
                         openConfluence: { showConfluence = true }
                     )
                     .matchedGeometryEffect(id: selected.persistentModelID, in: deckNS)
@@ -262,11 +268,13 @@ struct TrueStackDeckView: View {
             }
 
             // Routes
-            .sheet(isPresented: $showDue) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
-            .sheet(isPresented: $showChecklist) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
-            .sheet(isPresented: $showMindMap) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
-            .sheet(isPresented: $showNotes) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
-            .sheet(isPresented: $showInfo) { JobDetailView(job: expandedJob!).navigationBarTitleDisplayMode(.inline) }
+            // Routes  (replace the 5 per-tab sheets with this one)
+            .sheet(isPresented: $showDetail) {
+                if let j = expandedJob {
+                    JobDetailView(job: j, initialTab: initialDetailTab)
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
             .fullScreenCover(isPresented: $showGitHub) {
                 if let j = expandedJob { GitHubBrowserView(recentKey: "recentRepos.\(j.repoBucketKey)") }
             }
@@ -491,6 +499,11 @@ struct TrueStackDeckView: View {
     private func cycleColor(_ job: Job) {
         job.cycleColorForward()
         try? modelContext.save()
+    }
+
+    private func presentDetail(_ tab: JobDetailView.DetailTab) {
+        initialDetailTab = tab
+        showDetail = true
     }
 
     // MARK: - Add Job (mirrors HomeView behavior)
