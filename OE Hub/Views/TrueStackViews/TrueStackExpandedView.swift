@@ -4,7 +4,6 @@
 //
 //  Created by Ryan Bliss on 9/24/25.
 //
-
 import SwiftUI
 
 @available(iOS 26.0, *)
@@ -32,7 +31,7 @@ struct TrueStackExpandedView: View {
             let tint = color(for: job.colorCode)
 
             VStack(spacing: 0) {
-                // Grabber + close chevron
+                // Header (fixed)
                 HStack(spacing: 10) {
                     Button(action: close) {
                         Image(systemName: "chevron.down")
@@ -43,7 +42,6 @@ struct TrueStackExpandedView: View {
 
                     Spacer()
 
-                    // Small grabber for affordance
                     Capsule()
                         .frame(width: 44, height: 4)
                         .opacity(0.25)
@@ -52,77 +50,36 @@ struct TrueStackExpandedView: View {
                 .padding(.top, 8)
                 .padding(.horizontal, 10)
 
-                // Title
                 Text(job.title)
                     .font(.title2.weight(.semibold))
                     .lineLimit(1)
                     .padding(.top, 6)
                     .padding(.bottom, 10)
 
-                // Vertical list of actions with brief descriptions
-                VStack(spacing: 10) {
-                    ActionRow(
-                        system: "calendar",
-                        title: "Due",
-                        blurb: "Deliverables & reminders",
-                        action: openDue
-                    )
-                    ActionRow(
-                        system: "checkmark.square",
-                        title: "Checklist",
-                        blurb: "Quick to-do items per stack",
-                        action: openChecklist
-                    )
-                    ActionRow(
-                        system: "point.topleft.down.curvedto.point.bottomright.up",
-                        title: "Mind Map",
-                        blurb: "Zoomable canvas of ideas",
-                        action: openMindMap
-                    )
-                    ActionRow(
-                        system: "note.text",
-                        title: "Notes",
-                        blurb: "Rich text with basic formatting",
-                        action: openNotes
-                    )
-                    ActionRow(
-                        system: "info.circle",
-                        title: "Info",
-                        blurb: "Metadata, pay, role & more",
-                        action: openInfo
-                    )
-                    ActionRow(
-                        system: "chevron.left.slash.chevron.right",
-                        title: "GitHub",
-                        blurb: "Browse repo files & recents",
-                        action: openGitHub
-                    )
-                    ActionRow(
-                        system: "link",
-                        title: "Confluence",
-                        blurb: "Save up to 5 links per stack",
-                        action: openConfluence
-                    )
+                // Content (scrollable when needed — fixes landscape overflow)
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(spacing: 10) {
+                        ActionRow(system: "calendar", title: "Due",        blurb: "Deliverables & reminders",          action: openDue)
+                        ActionRow(system: "checkmark.square", title: "Checklist", blurb: "Quick to-do items per stack", action: openChecklist)
+                        ActionRow(system: "point.topleft.down.curvedto.point.bottomright.up", title: "Mind Map", blurb: "Zoomable canvas of ideas", action: openMindMap)
+                        ActionRow(system: "note.text", title: "Notes",      blurb: "Rich text with basic formatting",  action: openNotes)
+                        ActionRow(system: "info.circle", title: "Info",     blurb: "Metadata, pay, role & more",       action: openInfo)
+                        ActionRow(system: "chevron.left.slash.chevron.right", title: "GitHub", blurb: "Browse repo files & recents", action: openGitHub)
+                        ActionRow(system: "link", title: "Confluence",      blurb: "Save up to 5 links per stack",     action: openConfluence)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 14)
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 14)
             }
-            .frame(width: maxW)
-            .frame(maxHeight: maxH, alignment: .top)
+            .frame(width: maxW)                            // width cap
+            .frame(maxHeight: maxH, alignment: .top)       // panel height cap
             .background(
                 ZStack {
-                    // Tinted glass
-                    Color.clear
-                        .glassEffect(.regular.tint(tint.opacity(0.55)),
-                                     in: .rect(cornerRadius: 24))
-                    // Subtle highlight
+                    Color.clear.glassEffect(.regular.tint(tint.opacity(0.55)), in: .rect(cornerRadius: 24))
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(
-                            LinearGradient(colors: [Color.white.opacity(0.16), .clear],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing)
-                        )
+                        .fill(LinearGradient(colors: [Color.white.opacity(0.16), .clear],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing))
                         .blendMode(.plusLighter)
-                    // Border
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
                         .stroke(Color.white.opacity(0.10), lineWidth: 1)
                 }
@@ -130,7 +87,7 @@ struct TrueStackExpandedView: View {
             .shadow(color: .black.opacity(0.35), radius: 24, y: 10)
             .padding(.horizontal, 12)
             .padding(.bottom, max(12, geo.safeAreaInsets.bottom + 8))
-            .offset(y: max(0, dragOffsetY + dragTranslation.height)) // live-drag
+            .offset(y: max(0, dragOffsetY + dragTranslation.height)) // live drag
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .gesture(dragGesture(geoHeight: geo.size.height))
@@ -139,26 +96,19 @@ struct TrueStackExpandedView: View {
         }
     }
 
-    // Drag helper: let user swipe down to dismiss
     private func dragGesture(geoHeight: CGFloat) -> some Gesture {
         let threshold: CGFloat = min(220, geoHeight * 0.25)
         return DragGesture(minimumDistance: 5, coordinateSpace: .local)
             .updating($dragTranslation) { value, state, _ in
-                // Only track downward drags
                 state = CGSize(width: 0, height: max(0, value.translation.height))
             }
             .onEnded { value in
-                let shouldClose =
-                    value.translation.height > threshold ||
-                    value.velocity.height > 900 // a quick flick
-                if shouldClose {
-                    close()
-                } else {
-                    dragOffsetY = 0 // snap back
-                }
+                let shouldClose = value.translation.height > threshold || value.velocity.height > 900
+                if shouldClose { close() } else { dragOffsetY = 0 }
             }
     }
 }
+
 
 @available(iOS 26.0, *)
 private struct ActionRow: View {
